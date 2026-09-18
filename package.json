@@ -1,0 +1,21 @@
+{
+  "name": "btl-dbms-movie-ticket-booking",
+  "version": "1.0.0",
+  "description": "Movie Ticket Booking System using MySQL and Redis (BTL DBMS - HCMUT)",
+  "scripts": {
+    "build": "npm --prefix backend run build",
+    "start": "npm --prefix backend run start",
+    "start:dev": "npm --prefix backend run start:dev",
+    "seed": "npm --prefix backend run seed",
+    "lint": "npm --prefix backend run lint"
+  },
+  "keywords": [
+    "nestjs",
+    "mysql",
+    "redis",
+    "dbms",
+    "movie-ticket-booking"
+  ],
+  "author": "HCMUT DBMS Team",
+  "license": "UNLICENSED"
+}
