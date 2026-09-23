@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, Movie, Cinema, CinemaRoom, Seat, Showtime } from '../entities';
-import { UserRole, SeatType, MovieStatus } from '../../common/enums';
+import { User, Movie, Cinema, CinemaRoom, Seat, Showtime, Booking, Ticket } from '../entities';
+import { UserRole, SeatType, MovieStatus, BookingStatus, PaymentStatus } from '../../common/enums';
 
 @Injectable()
 export class SeedService {
@@ -589,6 +589,203 @@ export class SeedService {
         this.logger.log(`-> Đã nạp thành công ${newShowtimesCount} suất chiếu mẫu mới.`);
       } else {
         this.logger.log('-> Toàn bộ suất chiếu mẫu đã tồn tại, bỏ qua.');
+      }
+    }
+
+    // 5. TẠO BOOKINGS & TICKETS MẪU
+    const bookingRepo = this.dataSource.getRepository(Booking);
+    const ticketRepo = this.dataSource.getRepository(Ticket);
+
+    const customerUsers = await userRepo.find({
+      where: { role: UserRole.CUSTOMER },
+      take: 10,
+    });
+    const allShowtimes = await showtimeRepo.find();
+
+    if (customerUsers.length >= 4 && allShowtimes.length >= 3) {
+      // ----------------------------------------------------
+      // ĐƠN 1: 2 vé thường (A1, A2) - CONFIRMED & PAID qua MOMO
+      // ----------------------------------------------------
+      const showtime1 = allShowtimes[0];
+      const seatsRoom1 = await seatRepo.find({
+        where: { roomId: showtime1.roomId },
+        order: { seatNumber: 'ASC' },
+      });
+
+      const code1 = 'BK-DUNE-2026-001';
+      const exists1 = await bookingRepo.findOne({ where: { bookingCode: code1 } });
+
+      if (!exists1 && seatsRoom1.length >= 2) {
+        const s1 = seatsRoom1[0];
+        const s2 = seatsRoom1[1];
+        const price1 = Number(showtime1.basePrice) * Number(s1.priceMultiplier || 1.0);
+        const price2 = Number(showtime1.basePrice) * Number(s2.priceMultiplier || 1.0);
+
+        const booking1 = await bookingRepo.save(
+          bookingRepo.create({
+            bookingCode: code1,
+            userId: customerUsers[0].id,
+            showtimeId: showtime1.id,
+            totalAmount: price1 + price2,
+            status: BookingStatus.CONFIRMED,
+            paymentStatus: PaymentStatus.PAID,
+            paymentMethod: 'MOMO',
+            paymentTransactionId: 'TXN-MOMO-88291039',
+          }),
+        );
+
+        await ticketRepo.save([
+          ticketRepo.create({
+            ticketCode: `TK-${booking1.id}-${s1.seatNumber}`,
+            bookingId: booking1.id,
+            seatId: s1.id,
+            price: price1,
+            status: 'VALID',
+          }),
+          ticketRepo.create({
+            ticketCode: `TK-${booking1.id}-${s2.seatNumber}`,
+            bookingId: booking1.id,
+            seatId: s2.id,
+            price: price2,
+            status: 'VALID',
+          }),
+        ]);
+        this.logger.log(`-> Đã tạo đơn booking '${code1}' kèm 2 vé (${s1.seatNumber}, ${s2.seatNumber})`);
+      }
+
+      // ----------------------------------------------------
+      // ĐƠN 2: 1 vé VIP (C5) - PENDING & PENDING qua VNPAY
+      // ----------------------------------------------------
+      const showtime2 = allShowtimes[1];
+      const seatsRoom2 = await seatRepo.find({
+        where: { roomId: showtime2.roomId },
+        order: { seatNumber: 'ASC' },
+      });
+
+      const code2 = 'BK-IO2-2026-002';
+      const exists2 = await bookingRepo.findOne({ where: { bookingCode: code2 } });
+      const vipSeat = seatsRoom2.find((s) => s.type === SeatType.VIP) || seatsRoom2[0];
+
+      if (!exists2 && vipSeat) {
+        const priceVip = Number(showtime2.basePrice) * Number(vipSeat.priceMultiplier || 1.25);
+
+        const booking2 = await bookingRepo.save(
+          bookingRepo.create({
+            bookingCode: code2,
+            userId: customerUsers[1].id,
+            showtimeId: showtime2.id,
+            totalAmount: priceVip,
+            status: BookingStatus.PENDING,
+            paymentStatus: PaymentStatus.PENDING,
+            paymentMethod: 'VNPAY',
+            paymentTransactionId: undefined,
+          }),
+        );
+
+        await ticketRepo.save([
+          ticketRepo.create({
+            ticketCode: `TK-${booking2.id}-${vipSeat.seatNumber}`,
+            bookingId: booking2.id,
+            seatId: vipSeat.id,
+            price: priceVip,
+            status: 'PENDING',
+          }),
+        ]);
+        this.logger.log(`-> Đã tạo đơn booking '${code2}' kèm 1 vé VIP (${vipSeat.seatNumber})`);
+      }
+
+      // ----------------------------------------------------
+      // ĐƠN 3: 3 vé nhóm (B1, B2, B3) - CONFIRMED & PAID qua ZALOPAY
+      // ----------------------------------------------------
+      const code3 = 'BK-GROUP-2026-003';
+      const exists3 = await bookingRepo.findOne({ where: { bookingCode: code3 } });
+
+      if (!exists3 && seatsRoom1.length >= 5) {
+        const sB1 = seatsRoom1[2];
+        const sB2 = seatsRoom1[3];
+        const sB3 = seatsRoom1[4];
+        const p1 = Number(showtime1.basePrice) * Number(sB1.priceMultiplier || 1.0);
+        const p2 = Number(showtime1.basePrice) * Number(sB2.priceMultiplier || 1.0);
+        const p3 = Number(showtime1.basePrice) * Number(sB3.priceMultiplier || 1.0);
+
+        const booking3 = await bookingRepo.save(
+          bookingRepo.create({
+            bookingCode: code3,
+            userId: customerUsers[2].id,
+            showtimeId: showtime1.id,
+            totalAmount: p1 + p2 + p3,
+            status: BookingStatus.CONFIRMED,
+            paymentStatus: PaymentStatus.PAID,
+            paymentMethod: 'ZALOPAY',
+            paymentTransactionId: 'ZP-TRANS-9912048',
+          }),
+        );
+
+        await ticketRepo.save([
+          ticketRepo.create({
+            ticketCode: `TK-${booking3.id}-${sB1.seatNumber}`,
+            bookingId: booking3.id,
+            seatId: sB1.id,
+            price: p1,
+            status: 'VALID',
+          }),
+          ticketRepo.create({
+            ticketCode: `TK-${booking3.id}-${sB2.seatNumber}`,
+            bookingId: booking3.id,
+            seatId: sB2.id,
+            price: p2,
+            status: 'VALID',
+          }),
+          ticketRepo.create({
+            ticketCode: `TK-${booking3.id}-${sB3.seatNumber}`,
+            bookingId: booking3.id,
+            seatId: sB3.id,
+            price: p3,
+            status: 'VALID',
+          }),
+        ]);
+        this.logger.log(`-> Đã tạo đơn booking '${code3}' kèm 3 vé nhóm (${sB1.seatNumber}, ${sB2.seatNumber}, ${sB3.seatNumber})`);
+      }
+
+      // ----------------------------------------------------
+      // ĐƠN 4: 1 vé thất bại/hết hạn - CANCELLED & FAILED
+      // ----------------------------------------------------
+      const showtime3 = allShowtimes[2] || allShowtimes[0];
+      const seatsRoom3 = await seatRepo.find({
+        where: { roomId: showtime3.roomId },
+        order: { seatNumber: 'DESC' },
+      });
+
+      const code4 = 'BK-FAIL-2026-004';
+      const exists4 = await bookingRepo.findOne({ where: { bookingCode: code4 } });
+
+      if (!exists4 && seatsRoom3.length > 0) {
+        const seatCancel = seatsRoom3[0];
+        const priceCancel = Number(showtime3.basePrice) * Number(seatCancel.priceMultiplier || 1.0);
+
+        const booking4 = await bookingRepo.save(
+          bookingRepo.create({
+            bookingCode: code4,
+            userId: customerUsers[3].id,
+            showtimeId: showtime3.id,
+            totalAmount: priceCancel,
+            status: BookingStatus.CANCELLED,
+            paymentStatus: PaymentStatus.FAILED,
+            paymentMethod: 'VNPAY',
+            paymentTransactionId: undefined,
+          }),
+        );
+
+        await ticketRepo.save([
+          ticketRepo.create({
+            ticketCode: `TK-${booking4.id}-${seatCancel.seatNumber}`,
+            bookingId: booking4.id,
+            seatId: seatCancel.id,
+            price: priceCancel,
+            status: 'CANCELLED',
+          }),
+        ]);
+        this.logger.log(`-> Đã tạo đơn booking '${code4}' trạng thái CANCELLED (${seatCancel.seatNumber})`);
       }
     }
 
