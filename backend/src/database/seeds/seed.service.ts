@@ -21,30 +21,166 @@ export class SeedService {
     const showtimeRepo = this.dataSource.getRepository(Showtime);
 
     // 1. Tạo Users mẫu (Admin & Customer)
-    const existingAdmin = await userRepo.findOne({
-      where: { email: 'admin@cinema.com' },
-    });
-    if (!existingAdmin) {
-      const passwordHash = await bcrypt.hash('Admin@123', 10);
-      await userRepo.save([
-        userRepo.create({
-          email: 'admin@cinema.com',
-          password: passwordHash,
-          fullName: 'Quản Trị Viên (Admin)',
-          phoneNumber: '0901234567',
-          role: UserRole.ADMIN,
-        }),
-        userRepo.create({
-          email: 'customer@gmail.com',
-          password: passwordHash,
-          fullName: 'Khách Hàng Mẫu',
-          phoneNumber: '0988888888',
-          role: UserRole.CUSTOMER,
-        }),
-      ]);
-      this.logger.log(
-        '-> Đã tạo tài khoản mẫu: admin@cinema.com (Admin@123), customer@gmail.com (Admin@123)',
-      );
+    const rawUsers = [
+      {
+        email: 'ha.quach@cinema.vn',
+        fullName: 'Quách Văn Hà',
+        phoneNumber: '0901234567',
+        role: UserRole.ADMIN,
+        rawPassword: 'HaQuach@Admin2026',
+      },
+      {
+        email: 'long.nguyen@cinema.vn',
+        fullName: 'Nguyễn Hoàng Long',
+        phoneNumber: '0908889999',
+        role: UserRole.ADMIN,
+        rawPassword: 'LongNguyen@Admin88',
+      },
+      {
+        email: 'nam.tran@cinema.vn',
+        fullName: 'Trần Bảo Nam',
+        phoneNumber: '0902223344',
+        role: UserRole.ADMIN,
+        rawPassword: 'BaoNam#Admin2026',
+      },
+      {
+        email: 'thao.le@cinema.vn',
+        fullName: 'Lê Phương Thảo',
+        phoneNumber: '0903334455',
+        role: UserRole.ADMIN,
+        rawPassword: 'PhuongThao!Admin99',
+      },
+      {
+        email: 'mai.tran@gmail.com',
+        fullName: 'Trần Thị Mai',
+        phoneNumber: '0981112233',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'MaiTran@Pass123',
+      },
+      {
+        email: 'duc.pham@gmail.com',
+        fullName: 'Phạm Minh Đức',
+        phoneNumber: '0982223344',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'MinhDuc#Secure89',
+      },
+      {
+        email: 'linh.vu@gmail.com',
+        fullName: 'Vũ Thảo Linh',
+        phoneNumber: '0983334455',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'ThaoLinh@2026!',
+      },
+      {
+        email: 'huy.dang@gmail.com',
+        fullName: 'Đặng Quốc Huy',
+        phoneNumber: '0984445566',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'QuocHuy$9988',
+      },
+      {
+        email: 'anh.bui@gmail.com',
+        fullName: 'Bùi Ngọc Ánh',
+        phoneNumber: '0985556677',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'NgocAnh_Cinema@1',
+      },
+      {
+        email: 'long.do@gmail.com',
+        fullName: 'Đỗ Thành Long',
+        phoneNumber: '0986667788',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'ThanhLong#Pass77',
+      },
+      {
+        email: 'my.ho@gmail.com',
+        fullName: 'Hồ Diệu My',
+        phoneNumber: '0987778899',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'DieuMy@LoveMovie',
+      },
+      {
+        email: 'khai.ngo@gmail.com',
+        fullName: 'Ngô Quang Khải',
+        phoneNumber: '0988889900',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'KhaiNgo@Secret12',
+      },
+      {
+        email: 'hang.duong@gmail.com',
+        fullName: 'Dương Thúy Hằng',
+        phoneNumber: '0989990011',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'ThuyHang!Cinema26',
+      },
+      {
+        email: 'bao.ly@gmail.com',
+        fullName: 'Lý Gia Bảo',
+        phoneNumber: '0971112233',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'GiaBao$Fast2026',
+      },
+      {
+        email: 'thu.phan@gmail.com',
+        fullName: 'Phan Hoài Thu',
+        phoneNumber: '0972223344',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'HoaiThu@Movie2026',
+      },
+      {
+        email: 'tung.trinh@gmail.com',
+        fullName: 'Trịnh Thanh Tùng',
+        phoneNumber: '0973334455',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'ThanhTung#Pass99',
+      },
+      {
+        email: 'quynh.vo@gmail.com',
+        fullName: 'Võ Trúc Quỳnh',
+        phoneNumber: '0974445566',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'TrucQuynh$Cinema8',
+      },
+      {
+        email: 'bach.mai@gmail.com',
+        fullName: 'Mai Xuân Bách',
+        phoneNumber: '0975556677',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'XuanBach@Pro2026',
+      },
+      {
+        email: 'tuan.ta@gmail.com',
+        fullName: 'Tạ Minh Tuấn',
+        phoneNumber: '0976667788',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'MinhTuan#Cinema01',
+      },
+      {
+        email: 'ngan.kim@gmail.com',
+        fullName: 'Kim Thúy Ngân',
+        phoneNumber: '0977778899',
+        role: UserRole.CUSTOMER,
+        rawPassword: 'ThuyNgan@Pass2026',
+      },
+    ];
+
+    for (const u of rawUsers) {
+
+      const exists = await userRepo.findOne({ where: { email: u.email } });
+      
+      if (!exists) {
+        const hashedPassword = await bcrypt.hash(u.rawPassword, 10);
+        await userRepo.save(
+          userRepo.create({
+            email: u.email,
+            fullName: u.fullName,
+            phoneNumber: u.phoneNumber,
+            role: u.role,
+            password: hashedPassword,
+          }),
+        );
+        this.logger.log(`-> Đã thêm mới user: ${u.email}`);
+      }
     }
 
     // 2. Tạo Rạp & Phòng chiếu mẫu
