@@ -300,49 +300,166 @@ export class SeedService {
     }
 
     // 3. Tạo Phim mẫu
-    const existingMovie = await movieRepo.findOne({
-      where: { title: 'Dune: Part Two' },
-    });
-    let movieDune: Movie;
+    const sampleMovies = [
+      {
+        title: 'Dune: Part Two',
+        description:
+          'Hành trình huyền thoại của Paul Atreides khi anh hợp nhất với Chani và người Fremen để trả thù những kẻ đã hủy diệt gia tộc mình.',
+        durationMinutes: 166,
+        releaseDate: new Date('2024-03-01'),
+        genre: 'Khoa học viễn tưởng, Phiêu lưu',
+        director: 'Denis Villeneuve',
+        cast: 'Timothée Chalamet, Zendaya, Rebecca Ferguson',
+        posterUrl: 'https://image.tmdb.org/t/p/original/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=Way9Dexny3w',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 8.5,
+      },
+      {
+        title: 'Oppenheimer',
+        description:
+          'Câu chuyện kịch tính về cuộc đời và sự dằn vặt đạo đức của J. Robert Oppenheimer trong dự án Manhattan chế tạo bom nguyên tử đầu tiên.',
+        durationMinutes: 180,
+        releaseDate: new Date('2023-07-21'),
+        genre: 'Tiểu sử, Lịch sử, Chính kịch',
+        director: 'Christopher Nolan',
+        cast: 'Cillian Murphy, Emily Blunt, Matt Damon, Robert Downey Jr.',
+        posterUrl: 'https://image.tmdb.org/t/p/original/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=uYPbbksJxIg',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 8.9,
+      },
+      {
+        title: 'Interstellar',
+        description:
+          'Một nhóm phi hành gia du hành qua một hố sâu bí ẩn ngoài không gian nhằm tìm kiếm hành tinh mới có thể duy trì sự sống cho nhân loại.',
+        durationMinutes: 169,
+        releaseDate: new Date('2014-11-07'),
+        genre: 'Khoa học viễn tưởng, Phiêu lưu',
+        director: 'Christopher Nolan',
+        cast: 'Matthew McConaughey, Anne Hathaway, Jessica Chastain',
+        posterUrl: 'https://image.tmdb.org/t/p/original/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=zSWdZVtXT7E',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 8.7,
+      },
+      {
+        title: 'Deadpool & Wolverine',
+        description:
+          'Wade Wilson tái xuất giang hồ và buộc phải kéo Wolverine ra khỏi cơn khủng hoảng nhằm bảo vệ dòng thời gian quê hương khỏi diệt vong.',
+        durationMinutes: 128,
+        releaseDate: new Date('2024-07-26'),
+        genre: 'Hành động, Hài hước, Siêu anh hùng',
+        director: 'Shawn Levy',
+        cast: 'Ryan Reynolds, Hugh Jackman, Emma Corrin',
+        posterUrl: 'https://image.tmdb.org/t/p/original/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=73_1biulkYk',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 7.8,
+      },
+      {
+        title: 'Godzilla x Kong: The New Empire',
+        description:
+          'Hai thế lực quái thú hùng mạnh nhất lịch sử buộc phải bắt tay để chống lại một mối hiểm họa tiềm ẩn từ sâu trong Lòng Đất Rỗng.',
+        durationMinutes: 115,
+        releaseDate: new Date('2024-03-29'),
+        genre: 'Hành động, Quái thú, Giả tưởng',
+        director: 'Adam Wingard',
+        cast: 'Rebecca Hall, Brian Tyree Henry, Dan Stevens',
+        posterUrl: 'https://image.tmdb.org/t/p/original/tMefBSflR6PGQLv7WvFPpKLZkyk.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=1qjV_cc7pVM',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 7.2,
+      },
+      {
+        title: 'Inside Out 2',
+        description:
+          'Khi cô bé Riley bước vào tuổi dậy thì, trụ sở cảm xúc trong tâm trí bất ngờ đón nhận những cảm xúc mới nổi loạn, dẫn đầu là Anxiety.',
+        durationMinutes: 96,
+        releaseDate: new Date('2024-06-14'),
+        genre: 'Hoạt hình, Gia đình, Hài kịch',
+        director: 'Kelsey Mann',
+        cast: 'Amy Poehler, Maya Hawke, Phyllis Smith',
+        posterUrl: 'https://image.tmdb.org/t/p/original/vpnVM9B6NMmQpWeZvzLvDESb2QY.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=mg50EkStx-s',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 7.9,
+      },
+      {
+        title: 'Spider-Man: Across the Spider-Verse',
+        description:
+          'Miles Morales bước vào chuyến phiêu lưu xuyên qua đa vũ trụ nhện và phải đưa ra lựa chọn định mệnh giữa người mình yêu và trách nhiệm.',
+        durationMinutes: 140,
+        releaseDate: new Date('2023-06-02'),
+        genre: 'Hoạt hình, Hành động, Viễn tưởng',
+        director: 'Joaquim Dos Santos, Kemp Powers',
+        cast: 'Shameik Moore, Hailee Steinfeld, Oscar Isaac',
+        posterUrl: 'https://image.tmdb.org/t/p/original/8Vt6mWEReuy4Of61Lnj5Xj704m8.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=cqGjhVJWtEg',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 8.7,
+      },
+      {
+        title: 'Kung Fu Panda 4',
+        description:
+          'Po chuẩn bị tiếp nhận vai trò Thủ lĩnh tinh thần của Thung lũng Hòa Bình nhưng phải đối đầu với phù thủy Tắc Kè Bông biến hình nguy hiểm.',
+        durationMinutes: 94,
+        releaseDate: new Date('2024-03-08'),
+        genre: 'Hoạt hình, Hành động, Hài hước',
+        director: 'Mike Mitchell',
+        cast: 'Jack Black, Awkwafina, Viola Davis',
+        posterUrl: 'https://image.tmdb.org/t/p/original/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=xCVBU07uGf4',
+        status: MovieStatus.NOW_SHOWING,
+        rating: 7.1,
+      },
+      {
+        title: 'Avatar: Fire and Ash',
+        description:
+          'Chương thứ ba tái hiện thế giới Pandora kỳ vĩ, đưa gia đình Jake Sully chạm trán với Tộc Tro tàn (Ash People) tàn bạo và hiếu chiến.',
+        durationMinutes: 190,
+        releaseDate: new Date('2025-12-19'),
+        genre: 'Khoa học viễn tưởng, Phiêu lưu, Hành động',
+        director: 'James Cameron',
+        cast: 'Sam Worthington, Zoe Saldana, Sigourney Weaver',
+        posterUrl: 'https://image.tmdb.org/t/p/original/t6HIqrRAclMCA60NsSmeqe9RmNV.jpg',
+        trailerUrl: 'https://www.youtube.com/watch?v=Eb2TjJr21Nk',
+        status: MovieStatus.COMING_SOON,
+        rating: 0.0,
+      },
+      {
+        title: 'Captain America: Brave New World',
+        description:
+          'Sam Wilson chính thức gánh vác chiếc khiên Captain America trong một cuộc khủng hoảng quốc tế mới liên quan đến tổng thống Thaddeus Ross.',
+        durationMinutes: 125,
+        releaseDate: new Date('2025-02-14'),
+        genre: 'Hành động, Giật gân, Siêu anh hùng',
+        director: 'Julius Onah',
+        cast: 'Anthony Mackie, Harrison Ford, Danny Ramirez',
+        posterUrl: 'https://theposterdb.com/api/assets/595571/view',
+        trailerUrl: 'https://www.youtube.com/watch?v=FEa9pPqGhPY',
+        status: MovieStatus.COMING_SOON,
+        rating: 0.0,
+      },
+    ];
 
-    if (!existingMovie) {
-      movieDune = await movieRepo.save(
-        movieRepo.create({
-          title: 'Dune: Part Two',
-          description:
-            'Hành trình huyền thoại của Paul Atreides khi anh hợp nhất với Chani và Fremen để trả thù...',
-          durationMinutes: 166,
-          releaseDate: new Date('2026-03-01'),
-          genre: 'Khoa học viễn tưởng, Phiêu lưu',
-          director: 'Denis Villeneuve',
-          cast: 'Timothée Chalamet, Zendaya, Rebecca Ferguson',
-          posterUrl:
-            'https://images.unsplash.com/photo-1534447677768-be436bb09401',
-          trailerUrl: 'https://www.youtube.com/watch?v=Way9Dexny3w',
-          status: MovieStatus.NOW_SHOWING,
-          rating: 8.8,
-        }),
-      );
+    let newMoviesCount = 0;
+    for (const movieData of sampleMovies) {
+      const existingMovie = await movieRepo.findOne({
+        where: { title: movieData.title },
+      });
 
-      await movieRepo.save(
-        movieRepo.create({
-          title: 'Oppenheimer',
-          description:
-            'Câu chuyện về nhà vật lý lý thuyết J. Robert Oppenheimer, cha đẻ của bom nguyên tử...',
-          durationMinutes: 180,
-          releaseDate: new Date('2026-02-15'),
-          genre: 'Tiểu sử, Lịch sử, Chính kịch',
-          director: 'Christopher Nolan',
-          cast: 'Cillian Murphy, Emily Blunt, Matt Damon',
-          posterUrl:
-            'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba',
-          trailerUrl: 'https://www.youtube.com/watch?v=uYPbbksJxIg',
-          status: MovieStatus.NOW_SHOWING,
-          rating: 8.9,
-        }),
-      );
+      if (!existingMovie) {
+        await movieRepo.save(movieRepo.create(movieData));
+        newMoviesCount++;
+      }
+    }
 
-      this.logger.log('-> Đã tạo 2 phim mẫu: Dune: Part Two & Oppenheimer');
+    if (newMoviesCount > 0) {
+      this.logger.log(`-> Đã nạp thêm ${newMoviesCount} phim mới vào cơ sở dữ liệu.`);
+    } else {
+      this.logger.log('-> Toàn bộ phim mẫu đã tồn tại trong database, bỏ qua.');
+    }
 
       /* 4. Tạo Suất chiếu mẫu
       if (room1) {
@@ -365,7 +482,6 @@ export class SeedService {
         this.logger.log('-> Đã tạo suất chiếu mẫu cho ngày mai');
       }
       */
-    }
 
     this.logger.log('✅ Khởi tạo Seed Data hoàn tất!');
   }
