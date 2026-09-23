@@ -461,27 +461,136 @@ export class SeedService {
       this.logger.log('-> Toàn bộ phim mẫu đã tồn tại trong database, bỏ qua.');
     }
 
-      /* 4. Tạo Suất chiếu mẫu
-      if (room1) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(19, 0, 0, 0);
+      // 4. Tạo Suất chiếu mẫu
+      // 4.1. Lấy danh sách các phim đang chiếu và các phòng chiếu hiện có
+    const nowShowingMovies = await movieRepo.find({
+      where: { status: MovieStatus.NOW_SHOWING },
+    });
 
-        const endTomorrow = new Date(tomorrow);
-        endTomorrow.setHours(21, 46, 0, 0);
+    const allRooms = await roomRepo.find();
 
-        await showtimeRepo.save([
-          showtimeRepo.create({
-            movieId: movieDune.id,
-            roomId: room1.id,
-            startTime: tomorrow,
-            endTime: endTomorrow,
-            basePrice: 100000,
-          }),
-        ]);
-        this.logger.log('-> Đã tạo suất chiếu mẫu cho ngày mai');
+    if (nowShowingMovies.length > 0 && allRooms.length > 0) {
+      // Hàm tiện ích: Tạo mốc thời gian chuẩn (ngày + giờ:phút)
+      const buildScheduleDate = (daysFromNow: number, hours: number, minutes: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + daysFromNow);
+        date.setHours(hours, minutes, 0, 0);
+        return date;
+      };
+
+      // 4.2. Cấu hình danh sách 8 suất chiếu mẫu
+      // Phân bổ các phim hot (Dune, Oppenheimer, Deadpool, Inside Out 2) vào các phòng khác nhau
+      const showtimeConfigs = [
+        // --- HÔM NAY (daysFromNow = 0) ---
+        {
+          movieTitle: 'Dune: Part Two',
+          roomIndex: 0, // Phòng 01 - IMAX Laser (CGV Landmark 81)
+          daysFromNow: 0,
+          hour: 18,
+          minute: 30,
+          basePrice: 120000,
+        },
+        {
+          movieTitle: 'Inside Out 2',
+          roomIndex: 1, // Phòng 02 - Gold Class (CGV Landmark 81)
+          daysFromNow: 0,
+          hour: 19,
+          minute: 0,
+          basePrice: 100000,
+        },
+        {
+          movieTitle: 'Deadpool & Wolverine',
+          roomIndex: 2, // Phòng 01 - IMAX (Galaxy Sala)
+          daysFromNow: 0,
+          hour: 20,
+          minute: 0,
+          basePrice: 110000,
+        },
+
+        // --- NGÀY MAI (daysFromNow = 1) ---
+        {
+          movieTitle: 'Dune: Part Two',
+          roomIndex: 0,
+          daysFromNow: 1,
+          hour: 14,
+          minute: 0,
+          basePrice: 100000,
+        },
+        {
+          movieTitle: 'Oppenheimer',
+          roomIndex: 0,
+          daysFromNow: 1,
+          hour: 18,
+          minute: 0,
+          basePrice: 120000,
+        },
+        {
+          movieTitle: 'Spider-Man: Across the Spider-Verse',
+          roomIndex: 2,
+          daysFromNow: 1,
+          hour: 16,
+          minute: 30,
+          basePrice: 95000,
+        },
+        {
+          movieTitle: 'Godzilla x Kong: The New Empire',
+          roomIndex: 4, // Phòng 01 - Super Plex (Lotte Gò Vấp)
+          daysFromNow: 1,
+          hour: 19,
+          minute: 30,
+          basePrice: 105000,
+        },
+        {
+          movieTitle: 'Kung Fu Panda 4',
+          roomIndex: 6, // Phòng 01 - First Class (BHD Cầu Giấy)
+          daysFromNow: 1,
+          hour: 17,
+          minute: 0,
+          basePrice: 90000,
+        },
+      ];
+
+      let newShowtimesCount = 0;
+
+      for (const config of showtimeConfigs) {
+        const targetMovie = nowShowingMovies.find((m) => m.title === config.movieTitle);
+        const targetRoom = allRooms[config.roomIndex] || allRooms[0];
+
+        if (targetMovie && targetRoom) {
+          const startTime = buildScheduleDate(config.daysFromNow, config.hour, config.minute);
+
+          // Tự động tính endTime = startTime + durationMinutes (cộng thêm 10 phút nghỉ chuyển suất)
+          const endTime = new Date(startTime.getTime() + (targetMovie.durationMinutes + 10) * 60 * 1000);
+
+          // Kiểm tra xem phòng đó vào đúng thời điểm đó đã có suất chiếu chưa
+          const existingShowtime = await showtimeRepo.findOne({
+            where: {
+              roomId: targetRoom.id,
+              startTime: startTime,
+            },
+          });
+
+          if (!existingShowtime) {
+            await showtimeRepo.save(
+              showtimeRepo.create({
+                movieId: targetMovie.id,
+                roomId: targetRoom.id,
+                startTime,
+                endTime,
+                basePrice: config.basePrice,
+              }),
+            );
+            newShowtimesCount++;
+          }
+        }
       }
-      */
+
+      if (newShowtimesCount > 0) {
+        this.logger.log(`-> Đã nạp thành công ${newShowtimesCount} suất chiếu mẫu mới.`);
+      } else {
+        this.logger.log('-> Toàn bộ suất chiếu mẫu đã tồn tại, bỏ qua.');
+      }
+    }
 
     this.logger.log('✅ Khởi tạo Seed Data hoàn tất!');
   }
