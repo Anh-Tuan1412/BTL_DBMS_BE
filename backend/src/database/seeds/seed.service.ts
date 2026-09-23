@@ -184,58 +184,119 @@ export class SeedService {
     }
 
     // 2. Tạo Rạp & Phòng chiếu mẫu
-    let cinema = await cinemaRepo.findOne({
-      where: { name: 'CGV Landmark 81' },
-    });
-    let room1: CinemaRoom;
+    const cinemaConfigs = [
+      // 2.1. CGV Landmark 81 (TP.HCM)
+      {
+        name: 'CGV Landmark 81',
+        address: '772 Điện Biên Phủ, Phường 22, Bình Thạnh',
+        city: 'TP. Hồ Chí Minh',
+        rooms: [
+          { name: 'Phòng 01 - IMAX Laser', rows: ['A', 'B', 'C', 'D'], cols: 10 }, // 40 ghế
+          { name: 'Phòng 02 - Gold Class', rows: ['A', 'B', 'C'], cols: 10 },       // 30 ghế
+        ],
+      },
+      // 2.2. Galaxy Sala (TP.HCM)
+      {
+        name: 'Galaxy Sala',
+        address: 'Tầng 3 Thiso Mall Sala, 10 Mai Chí Thọ, Thủ Đức',
+        city: 'TP. Hồ Chí Minh',
+        rooms: [
+          { name: 'Phòng 01 - IMAX', rows: ['A', 'B', 'C', 'D'], cols: 10 },         // 40 ghế
+          { name: 'Phòng 02 - Atmos', rows: ['A', 'B', 'C', 'D'], cols: 10 },        // 40 ghế
+        ],
+      },
+      // 2.3. Lotte Cinema Gò Vấp (TP.HCM)
+      {
+        name: 'Lotte Cinema Gò Vấp',
+        address: 'Tầng 4 Lotte Mart, 242 Nguyễn Văn Lượng, Gò Vấp',
+        city: 'TP. Hồ Chí Minh',
+        rooms: [
+          { name: 'Phòng 01 - Super Plex', rows: ['A', 'B', 'C', 'D'], cols: 10 },   // 40 ghế
+          { name: 'Phòng 02 - Standard 2D', rows: ['A', 'B', 'C'], cols: 10 },       // 30 ghế
+        ],
+      },
+      // 2.4. BHD Star Cầu Giấy (Hà Nội)
+      {
+        name: 'BHD Star Cầu Giấy',
+        address: 'Tầng 8 Discovery Complex, 302 Cầu Giấy',
+        city: 'Hà Nội',
+        rooms: [
+          { name: 'Phòng 01 - First Class', rows: ['A', 'B', 'C'], cols: 10 },       // 30 ghế
+          { name: 'Phòng 02 - Digital 2D', rows: ['A', 'B', 'C'], cols: 10 },        // 30 ghế
+        ],
+      },
+    ];
 
-    if (!cinema) {
-      cinema = await cinemaRepo.save(
-        cinemaRepo.create({
-          name: 'CGV Landmark 81',
-          address: '772 Điện Biên Phủ, Phường 22, Bình Thạnh',
-          city: 'TP. Hồ Chí Minh',
-        }),
-      );
+    let newCinemasCount = 0;
+    let newRoomsCount = 0;
 
-      room1 = await roomRepo.save(
-        roomRepo.create({
-          name: 'Phòng 01 - IMAX Laser',
-          cinemaId: cinema.id,
-          totalSeats: 40,
-        }),
-      );
+    for (const config of cinemaConfigs) {
+      // Tầng 1: Tìm hoặc tạo Cụm rạp
+      let cinema = await cinemaRepo.findOne({
+        where: { name: config.name },
+      });
 
-      await roomRepo.save(
-        roomRepo.create({
-          name: 'Phòng 02 - Gold Class',
-          cinemaId: cinema.id,
-          totalSeats: 30,
-        }),
-      );
+      if (!cinema) {
+        cinema = await cinemaRepo.save(
+          cinemaRepo.create({
+            name: config.name,
+            address: config.address,
+            city: config.city,
+          }),
+        );
+        newCinemasCount++;
+        this.logger.log(`-> Tạo mới rạp: ${config.name}`);
+      }
 
-      // Tạo ghế cho phòng 1 (4 hàng A-D, 10 ghế mỗi hàng)
-      const seatsToInsert: Partial<Seat>[] = [];
-      const rows = ['A', 'B', 'C', 'D'];
-      for (const row of rows) {
-        const isVip = row === 'C' || row === 'D';
-        for (let col = 1; col <= 10; col++) {
-          seatsToInsert.push({
-            roomId: room1.id,
-            row,
-            column: col,
-            seatNumber: `${row}${col}`,
-            type: isVip ? SeatType.VIP : SeatType.REGULAR,
-            priceMultiplier: isVip ? 1.25 : 1.0,
-          });
+      // Tầng 2: Kiểm tra từng Phòng chiếu bên trong Rạp đó
+      for (const roomData of config.rooms) {
+        let room = await roomRepo.findOne({
+          where: {
+            name: roomData.name,
+            cinemaId: cinema.id,
+          },
+        });
+
+        // Nếu phòng này chưa tồn tại trong rạp -> Tạo phòng và sinh ghế tương ứng
+        if (!room) {
+          const totalSeatsCount = roomData.rows.length * roomData.cols;
+          room = await roomRepo.save(
+            roomRepo.create({
+              name: roomData.name,
+              cinemaId: cinema.id,
+              totalSeats: totalSeatsCount,
+            }),
+          );
+          newRoomsCount++;
+
+          // Tầng 3: Tự động sinh sơ đồ ghế cho phòng mới
+          const seatsToInsert: Partial<Seat>[] = [];
+          for (const row of roomData.rows) {
+            // Hàng C và D là ghế VIP (hệ số giá 1.25), hàng A và B là ghế thường (1.0)
+            const isVip = row === 'C' || row === 'D';
+            for (let col = 1; col <= roomData.cols; col++) {
+              seatsToInsert.push({
+                roomId: room.id,
+                row,
+                column: col,
+                seatNumber: `${row}${col}`,
+                type: isVip ? SeatType.VIP : SeatType.REGULAR,
+                priceMultiplier: isVip ? 1.25 : 1.0,
+              });
+            }
+          }
+          await seatRepo.save(seatsToInsert);
+          this.logger.log(`   + Tạo '${room.name}' (${config.name}) kèm ${seatsToInsert.length} ghế`);
         }
       }
-      await seatRepo.save(seatsToInsert);
+    }
+
+    if (newCinemasCount > 0 || newRoomsCount > 0) {
       this.logger.log(
-        `-> Đã tạo rạp '${cinema.name}', 2 phòng chiếu và 40 ghế mẫu`,
+        `-> Hoàn tất nạp dữ liệu: +${newCinemasCount} rạp mới, +${newRoomsCount} phòng chiếu mới.`,
       );
     } else {
-      room1 = (await roomRepo.findOne({ where: { cinemaId: cinema.id } }))!;
+      this.logger.log('-> Toàn bộ rạp và phòng chiếu đã tồn tại đầy đủ, bỏ qua.');
     }
 
     // 3. Tạo Phim mẫu
@@ -283,7 +344,7 @@ export class SeedService {
 
       this.logger.log('-> Đã tạo 2 phim mẫu: Dune: Part Two & Oppenheimer');
 
-      // 4. Tạo Suất chiếu mẫu
+      /* 4. Tạo Suất chiếu mẫu
       if (room1) {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -303,6 +364,7 @@ export class SeedService {
         ]);
         this.logger.log('-> Đã tạo suất chiếu mẫu cho ngày mai');
       }
+      */
     }
 
     this.logger.log('✅ Khởi tạo Seed Data hoàn tất!');
