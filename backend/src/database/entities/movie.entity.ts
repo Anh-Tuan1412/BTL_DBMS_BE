@@ -13,37 +13,37 @@ import { Showtime } from './showtime.entity';
 @Entity('movies')
 export class Movie {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   @Index('idx_movie_title')
   @Column({ length: 255 })
-  title: string;
+  title!: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description!: string;
 
   @Column({ type: 'int', default: 120 })
-  durationMinutes: number;
+  durationMinutes!: number;
 
   @Index('idx_movie_release_date')
   @Column({ type: 'date' })
-  releaseDate: Date;
+  releaseDate!: Date;
 
   @Index('idx_movie_genre')
   @Column({ length: 100, nullable: true })
-  genre: string;
+  genre!: string;
 
   @Column({ length: 100, nullable: true })
-  director: string;
+  director!: string;
 
   @Column({ type: 'text', nullable: true })
-  cast: string;
+  cast!: string;
 
   @Column({ type: 'text', nullable: true })
-  posterUrl: string;
+  posterUrl!: string;
 
   @Column({ type: 'text', nullable: true })
-  trailerUrl: string;
+  trailerUrl!: string;
 
   @Index('idx_movie_status')
   @Column({
@@ -51,17 +51,17 @@ export class Movie {
     enum: MovieStatus,
     default: MovieStatus.NOW_SHOWING,
   })
-  status: MovieStatus;
+  status!: MovieStatus;
 
   @Column({ type: 'decimal', precision: 3, scale: 1, default: 8.5 })
-  rating: number;
+  rating!: number;
 
   @OneToMany(() => Showtime, (showtime) => showtime.movie)
-  showtimes: Showtime[];
+  showtimes!: Showtime[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }
