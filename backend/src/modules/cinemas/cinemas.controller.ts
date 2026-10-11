@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Body,
   Param,
@@ -10,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CinemasService } from './cinemas.service';
-import { CreateCinemaDto, CreateRoomDto } from './dto/cinema.dto';
+import { CreateCinemaDto, CreateRoomDto, UpdateCinemaDto, UpdateRoomDto } from './dto/cinema.dto';
 import { Public, Roles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { UserRole } from '../../common/enums';
@@ -75,5 +76,23 @@ export class CinemasController {
   @ApiOperation({ summary: 'Xóa phòng chiếu (Chỉ dành cho ADMIN)' })
   deleteRoom(@Param('id', ParseIntPipe) id: number) {
     return this.cinemasService.deleteRoom(id);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Put(':id')
+  @ApiOperation({ summary: 'Cập nhật thông tin rạp (Chỉ ADMIN)' })
+  updateCinema(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCinemaDto) {
+    return this.cinemasService.updateCinema(id, dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Put('rooms/:id')
+  @ApiOperation({ summary: 'Cập nhật thông tin phòng chiếu (Chỉ ADMIN)' })
+  updateRoom(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoomDto) {
+    return this.cinemasService.updateRoom(id, dto);
   }
 }
