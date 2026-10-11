@@ -12,25 +12,25 @@ import { CinemaRoom } from './cinema-room.entity';
 @Entity('cinemas')
 export class Cinema {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   @Index('idx_cinema_name')
   @Column({ length: 150 })
-  name: string;
+  name!: string;
 
   @Column({ length: 255 })
-  address: string;
+  address!: string;
 
   @Index('idx_cinema_city')
   @Column({ length: 100 })
-  city: string;
+  city!: string;
 
   @OneToMany(() => CinemaRoom, (room) => room.cinema, { cascade: true })
-  rooms: CinemaRoom[];
+  rooms!: CinemaRoom[];
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }
