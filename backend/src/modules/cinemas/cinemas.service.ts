@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cinema } from '../../database/entities/cinema.entity';
 import { CinemaRoom } from '../../database/entities/cinema-room.entity';
-import { CreateCinemaDto, CreateRoomDto } from './dto/cinema.dto';
+import { CreateCinemaDto, CreateRoomDto, UpdateCinemaDto, UpdateRoomDto } from './dto/cinema.dto';
 
 @Injectable()
 export class CinemasService {
@@ -20,66 +20,123 @@ export class CinemasService {
 
   // --- Quản lý Rạp ---
   async findAllCinemas() {
-    // TODO: Viết logic lấy danh sách các cụm rạp
+    const cinemas = await this.cinemaRepository.find({
+      relations: { rooms: true },
+      order: { createdAt: 'DESC' },
+    });
     return {
-      message: 'TODO: Quách Văn Hà viết logic lấy danh sách rạp',
-      data: [],
+      message: 'Lấy danh sách tất cả các cụm rạp thành công',
+      data: cinemas,
     };
   }
 
   async findCinemaById(id: number) {
-    // TODO: Viết logic lấy thông tin chi tiết rạp
+    const cinema = await this.cinemaRepository.findOne({
+      where: { id },
+      relations: { rooms: true },
+    });
+    if (!cinema) {
+      throw new NotFoundException(`Không tìm thấy rạp chiếu với ID ${id}`);
+    }
     return {
-      message: `TODO: Quách Văn Hà viết logic xem rạp ID ${id}`,
-      cinemaId: id,
+      message: 'Lấy thông tin chi tiết rạp thành công',
+      data: cinema,
     };
   }
 
   async createCinema(dto: CreateCinemaDto) {
-    // TODO: Viết logic thêm rạp chiếu mới
+    const cinema = this.cinemaRepository.create(dto);
+    const savedCinema = await this.cinemaRepository.save(cinema);
     return {
-      message: 'TODO: Quách Văn Hà viết logic tạo rạp',
-      payload: dto,
+      message: 'Thêm rạp chiếu phim mới thành công',
+      data: savedCinema,
+    };
+  }
+
+  async updateCinema(id: number, dto: UpdateCinemaDto) {
+    const cinemaResponse = await this.findCinemaById(id);
+    const cinema = cinemaResponse.data;
+
+    Object.assign(cinema, dto);
+    const updatedCinema = await this.cinemaRepository.save(cinema);
+
+    return {
+      message: `Cập nhật thông tin rạp ID ${id} thành công`,
+      data: updatedCinema,
     };
   }
 
   async deleteCinema(id: number) {
-    // TODO: Viết logic xóa rạp
+    const cinemaResponse = await this.findCinemaById(id);
+    const cinema = cinemaResponse.data;
+
+    await this.cinemaRepository.remove(cinema);
     return {
-      message: `TODO: Quách Văn Hà viết logic xóa rạp ID ${id}`,
+      message: `Đã xóa rạp chiếu ID ${id} thành công`,
     };
   }
 
   // --- Quản lý Phòng chiếu ---
   async findRoomsByCinema(cinemaId: number) {
-    // TODO: Viết logic lấy danh sách các phòng chiếu của rạp
+    await this.findCinemaById(cinemaId); // Kiểm tra rạp có tồn tại không
+    const rooms = await this.roomRepository.find({
+      where: { cinemaId },
+      order: { createdAt: 'DESC' },
+    });
     return {
-      message: `TODO: Quách Văn Hà viết logic lấy phòng chiếu của rạp ID ${cinemaId}`,
-      cinemaId,
-      data: [],
+      message: `Lấy danh sách phòng chiếu của rạp ID ${cinemaId} thành công`,
+      data: rooms,
     };
   }
 
   async findRoomById(id: number) {
-    // TODO: Viết logic xem chi tiết phòng chiếu
+    const room = await this.roomRepository.findOne({
+      where: { id },
+      relations: { cinema: true },
+    });
+    if (!room) {
+      throw new NotFoundException(`Không tìm thấy phòng chiếu với ID ${id}`);
+    }
     return {
-      message: `TODO: Quách Văn Hà viết logic xem phòng chiếu ID ${id}`,
-      roomId: id,
+      message: 'Lấy thông tin chi tiết phòng chiếu thành công',
+      data: room,
     };
   }
 
   async createRoom(dto: CreateRoomDto) {
-    // TODO: Viết logic tạo phòng chiếu mới cho rạp
+    await this.findCinemaById(dto.cinemaId); // Đảm bảo cinemaId hợp lệ
+    const room = this.roomRepository.create(dto);
+    const savedRoom = await this.roomRepository.save(room);
     return {
-      message: 'TODO: Quách Văn Hà viết logic tạo phòng chiếu',
-      payload: dto,
+      message: 'Thêm phòng chiếu mới thành công',
+      data: savedRoom,
+    };
+  }
+
+  async updateRoom(id: number, dto: UpdateRoomDto) {
+    const roomResponse = await this.findRoomById(id);
+    const room = roomResponse.data;
+
+    if (dto.cinemaId) {
+      await this.findCinemaById(dto.cinemaId); // Kiểm tra nếu thay đổi rạp chiếu
+    }
+
+    Object.assign(room, dto);
+    const updatedRoom = await this.roomRepository.save(room);
+
+    return {
+      message: `Cập nhật thông tin phòng chiếu ID ${id} thành công`,
+      data: updatedRoom,
     };
   }
 
   async deleteRoom(id: number) {
-    // TODO: Viết logic xóa phòng chiếu
+    const roomResponse = await this.findRoomById(id);
+    const room = roomResponse.data;
+
+    await this.roomRepository.remove(room);
     return {
-      message: `TODO: Quách Văn Hà viết logic xóa phòng chiếu ID ${id}`,
+      message: `Đã xóa phòng chiếu ID ${id} thành công`,
     };
   }
 }
