@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Movie } from '../../database/entities/movie.entity';
+import { Genre } from '../../database/entities/genre.entity';
 import { CreateMovieDto, UpdateMovieDto } from './dto/movie.dto';
 
 @Injectable()
@@ -9,15 +10,13 @@ export class MoviesService {
   constructor(
     @InjectRepository(Movie)
     private readonly movieRepository: Repository<Movie>,
+    @InjectRepository(Genre)
+    private readonly genreRepository: Repository<Genre>,
   ) {}
 
-  // =========================================================================
-  // TODO: Quách Văn Hà - Hiện thực UC1: Quản lý phim (CRUD phim)
-  // =========================================================================
-
   async findAll() {
-    // TODO: Viết logic lấy danh sách tất cả các phim
     const movies = await this.movieRepository.find({
+      relations: ['genres'],
       order: { createdAt: 'DESC' },
     });
     return {
@@ -27,8 +26,10 @@ export class MoviesService {
   }
 
   async findOne(id: number) {
-    // TODO: Viết logic lấy chi tiết phim theo ID
-    const movie = await this.movieRepository.findOne({ where: { id } });
+    const movie = await this.movieRepository.findOne({
+      where: { id },
+      relations: ['genres'],
+    });
     if (!movie) {
       throw new NotFoundException(`Không tìm thấy phim với ID = ${id}`);
     }
@@ -39,7 +40,18 @@ export class MoviesService {
   }
 
   async create(createMovieDto: CreateMovieDto) {
-    const newMovie = this.movieRepository.create(createMovieDto);
+    const { genreIds, ...movieData } = createMovieDto;
+
+    let genres: Genre[] = [];
+    if (genreIds && genreIds.length > 0) {
+      genres = await this.genreRepository.findBy({ id: In(genreIds) });
+    }
+
+    const newMovie = this.movieRepository.create({
+      ...movieData,
+      genres,
+    });
+
     const savedMovie = await this.movieRepository.save(newMovie);
     return {
       message: 'Thêm phim mới thành công',
@@ -48,12 +60,16 @@ export class MoviesService {
   }
 
   async update(id: number, updateMovieDto: UpdateMovieDto) {
-    // TODO: Viết logic cập nhật phim
     const movieResponse = await this.findOne(id);
     const movie = movieResponse.data;
 
-    // Ghi đè dữ liệu mới vào entity cũ
-    Object.assign(movie, updateMovieDto);
+    const { genreIds, ...movieData } = updateMovieDto;
+
+    if (genreIds) {
+      movie.genres = await this.genreRepository.findBy({ id: In(genreIds) });
+    }
+
+    Object.assign(movie, movieData);
     const updatedMovie = await this.movieRepository.save(movie);
 
     return {
@@ -63,7 +79,6 @@ export class MoviesService {
   }
 
   async remove(id: number) {
-    // TODO: Viết logic xóa phim
     const movieResponse = await this.findOne(id);
     const movie = movieResponse.data;
 

@@ -7,6 +7,8 @@ import {
   IsEnum,
   IsNumber,
   Min,
+  IsArray,
+  IsString,
 } from 'class-validator';
 import { MovieStatus } from '../../../common/enums';
 
@@ -34,9 +36,20 @@ export class CreateMovieDto {
   @IsDateString()
   releaseDate!: string;
 
-  @ApiProperty({ example: 'Tiểu sử, Lịch sử, Kịch tính', required: false })
+  @ApiProperty({
+    example: [1, 2, 3],
+    description: 'Danh sách ID thể loại phim',
+    required: false,
+  })
   @IsOptional()
-  genre?: string;
+  @IsArray()
+  @IsInt({ each: true })
+  genreIds?: number[];
+
+  @ApiProperty({ example: 'C18', description: 'Phân loại độ tuổi (C13, C16, C18, P)', required: false })
+  @IsOptional()
+  @IsString()
+  ageRating?: string;
 
   @ApiProperty({ example: 'Christopher Nolan', required: false })
   @IsOptional()
