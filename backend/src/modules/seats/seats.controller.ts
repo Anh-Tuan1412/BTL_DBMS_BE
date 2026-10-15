@@ -7,12 +7,17 @@ import {
   Param,
   ParseIntPipe,
   UseGuards,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SeatsService } from './seats.service';
 import { CreateSeatDto, GenerateSeatsForRoomDto } from './dto/seat.dto';
 import { Public, Roles, CurrentUser } from '../../common/decorators';
-import { JwtAuthGuard, RolesGuard } from '../../common/guards';
+import {
+  JwtAuthGuard,
+  RolesGuard,
+  OptionalJwtAuthGuard,
+} from '../../common/guards';
 import { UserRole } from '../../common/enums';
 import { User } from '../../database/entities/user.entity';
 
@@ -30,11 +35,13 @@ export class SeatsController {
 
   @Public()
   @Get('matrix/showtime/:showtimeId')
+  @UseGuards(OptionalJwtAuthGuard)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary:
-      'UC6: Xem sơ đồ và trạng thái ghế thời gian thực (kết hợp MySQL & Redis)',
+    summary: 'UC6: Xem sơ đồ và trạng thái ghế (kết hợp MySQL & Redis)',
     description:
-      'Trả về trạng thái: AVAILABLE (ghế trống), HOLDING (đang giữ 5p kèm TTL), BOOKED (đã đặt)',
+      'Không cần đăng nhập. Gửi JWT hợp lệ để nhận isHeldByMe. Trả trạng thái hiện tại khi gọi: AVAILABLE, HOLDING, BOOKED, INACTIVE; client cần gọi lại để cập nhật.',
   })
   getSeatMatrix(
     @Param('showtimeId', ParseIntPipe) showtimeId: number,

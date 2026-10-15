@@ -2,57 +2,43 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  CreateDateColumn,
-  UpdateDateColumn,
   ManyToOne,
   OneToMany,
   JoinColumn,
-  Index,
   Unique,
 } from 'typeorm';
-import { SeatType } from '../../common/enums';
 import { CinemaRoom } from './cinema-room.entity';
 import { Ticket } from './ticket.entity';
+import { SeatTypeEntity } from './seat-type.entity';
 
 @Entity('seats')
+@Unique(['roomId', 'row', 'column'])
 @Unique(['roomId', 'seatNumber'])
 export class Seat {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'seat_id' })
   id: number;
-
-  @Index('idx_seat_room_id')
-  @Column()
+  @Column({ name: 'room_id' })
   roomId: number;
-
-  @Column({ length: 5 })
-  row: string; // e.g. A, B, C, D
-
-  @Column({ type: 'int' })
-  column: number; // e.g. 1, 2, 3
-
-  @Column({ length: 10 })
-  seatNumber: string; // e.g. A1, A2, B3
-
+  @Column({ name: 'seat_row', length: 5 })
+  row: string;
+  @Column({ name: 'seat_number', type: 'int' })
+  column: number;
+  @Column({ name: 'seat_label', length: 10 })
+  seatNumber: string;
+  @Column({ name: 'seat_type_id' })
+  seatTypeId: number;
   @Column({
     type: 'enum',
-    enum: SeatType,
-    default: SeatType.REGULAR,
+    enum: ['AVAILABLE', 'INACTIVE'],
+    default: 'AVAILABLE',
   })
-  type: SeatType;
-
-  @Column({ type: 'decimal', precision: 3, scale: 2, default: 1.0 })
-  priceMultiplier: number;
-
-  @ManyToOne(() => CinemaRoom, (room) => room.seats, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'roomId' })
+  status: string;
+  @ManyToOne(() => SeatTypeEntity, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'seat_type_id' })
+  seatType: SeatTypeEntity;
+  @ManyToOne(() => CinemaRoom, (room) => room.seats, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'room_id' })
   room: CinemaRoom;
-
   @OneToMany(() => Ticket, (ticket) => ticket.seat)
   tickets: Ticket[];
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
 }

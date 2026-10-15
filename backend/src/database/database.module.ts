@@ -10,6 +10,10 @@ import {
   Showtime,
   Booking,
   Ticket,
+  Genre,
+  SeatTypeEntity,
+  ShowtimeSeat,
+  Payment,
 } from './entities';
 
 @Module({
@@ -21,9 +25,12 @@ import {
         type: 'mysql',
         host: configService.get<string>('DB_HOST', 'localhost'),
         port: Number(configService.get<number>('DB_PORT', 3306)),
-        username: configService.get<string>('DB_USER', 'movie_user'),
+        username:
+          configService.get<string>('DB_USERNAME') ||
+          configService.get<string>('DB_USER', 'movie_user'),
         password: configService.get<string>('DB_PASSWORD', 'movie_password'),
-        database: configService.get<string>('DB_NAME', 'movie_booking_db'),
+        database: configService.get<string>('DB_NAME', 'movie_ticket_db'),
+        timezone: 'Z',
         entities: [
           User,
           Movie,
@@ -33,8 +40,12 @@ import {
           Showtime,
           Booking,
           Ticket,
+          Genre,
+          SeatTypeEntity,
+          ShowtimeSeat,
+          Payment,
         ],
-        synchronize: true, // Tự động đồng bộ schema database trong môi trường dev
+        synchronize: false, // SQL migrations own the schema; never auto-alter existing data.
         logging: configService.get<string>('NODE_ENV') === 'development',
       }),
     }),
