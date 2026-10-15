@@ -36,7 +36,7 @@ export class BookingsController {
 
   @Post('create')
   @ApiOperation({
-    summary: 'UC8: Tạo đơn đặt vé (MySQL Serializable Transaction)',
+    summary: 'UC8: Tạo đơn đặt vé (MySQL transaction và khóa suất chiếu)',
     description: 'Chạy transaction kiểm tra và tạo Booking + Tickets an toàn',
   })
   createBooking(@CurrentUser() user: User, @Body() dto: CreateBookingDto) {
@@ -45,7 +45,7 @@ export class BookingsController {
 
   @Post('pay-mock')
   @ApiOperation({
-    summary: 'UC8: Thanh toán qua Stripe Test Mode (Mô phỏng)',
+    summary: 'UC8: Thanh toán mô phỏng nội bộ (chưa gọi Stripe)',
     description:
       'Xác nhận thanh toán, chuyển status sang CONFIRMED và giải phóng lock Redis',
   })
