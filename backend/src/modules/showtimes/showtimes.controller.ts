@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Body,
   Param,
   Query,
@@ -16,7 +17,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { ShowtimesService } from './showtimes.service';
-import { CreateShowtimeDto } from './dto/showtime.dto';
+import { CreateShowtimeDto, UpdateShowtimeDto } from './dto/showtime.dto';
 import { Public, Roles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { UserRole } from '../../common/enums';
@@ -55,6 +56,18 @@ export class ShowtimesController {
   @ApiOperation({ summary: 'Tạo suất chiếu mới (Chỉ dành cho ADMIN)' })
   create(@Body() dto: CreateShowtimeDto) {
     return this.showtimesService.create(dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch(':id')
+  @ApiOperation({ summary: 'Cập nhật suất chiếu chưa có booking' })
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateShowtimeDto,
+  ) {
+    return this.showtimesService.update(id, dto);
   }
 
   @ApiBearerAuth('JWT-auth')

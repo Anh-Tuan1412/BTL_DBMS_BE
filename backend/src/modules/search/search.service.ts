@@ -11,21 +11,67 @@ export class SearchService {
     private readonly movieRepository: Repository<Movie>,
   ) {}
 
-  // =========================================================================
-  // TODO: Nguyễn Thị Cẩm Vân - Hiện thực UC5: Tìm kiếm và lọc phim đa tiêu chí
-  // =========================================================================
-
   async searchMovies(filter: SearchMovieDto) {
-    // TODO: Vân viết logic QueryBuilder hoặc SQL để tìm kiếm/lọc phim:
-    // - Lọc theo tên phim (keyword)
-    // - Lọc theo thể loại (genre)
-    // - Lọc theo rạp chiếu (cinemaId)
-    // - Lọc theo ngày chiếu (date)
-    // - Lọc theo khoảng giá (minPrice, maxPrice)
+    const query = this.movieRepository
+      .createQueryBuilder('movie')
+      .leftJoinAndSelect('movie.genres', 'genre')
+      .leftJoinAndSelect('movie.showtimes', 'showtime')
+      .leftJoinAndSelect('showtime.room', 'room')
+      .leftJoinAndSelect('room.cinema', 'cinema')
+      .distinct(true)
+      .orderBy('movie.title', 'ASC')
+      .addOrderBy('showtime.startTime', 'ASC');
+
+    if (filter.keyword && filter.keyword.trim()) {
+      const keyword = `%${filter.keyword.trim()}%`;
+      query.andWhere('LOWER(movie.title) LIKE LOWER(:keyword)', { keyword });
+    }
+
+    if (filter.genre && filter.genre.trim()) {
+      const genre = filter.genre.trim();
+      query.andWhere(
+        'movie.id IN (SELECT mg.movie_id FROM movie_genres mg JOIN genres g ON g.genre_id = mg.genre_id WHERE g.genre_name = :genre)',
+        { genre },
+      );
+    }
+
+    if (filter.cinemaId !== undefined && filter.cinemaId !== null) {
+      query.andWhere('cinema.id = :cinemaId', { cinemaId: filter.cinemaId });
+    }
+
+    if (filter.date) {
+      const start = new Date(`${filter.date}T00:00:00+07:00`);
+      const end = new Date(start.getTime() + 86400000);
+      query.andWhere(
+        'showtime.startTime >= :dayStart AND showtime.startTime < :dayEnd',
+        {
+          dayStart: start,
+          dayEnd: end,
+        },
+      );
+    }
+
+    if (filter.minPrice !== undefined && filter.minPrice !== null) {
+      query.andWhere('showtime.basePrice >= :minPrice', {
+        minPrice: filter.minPrice,
+      });
+    }
+
+    if (filter.maxPrice !== undefined && filter.maxPrice !== null) {
+      query.andWhere('showtime.basePrice <= :maxPrice', {
+        maxPrice: filter.maxPrice,
+      });
+    }
+
+    const items = await query.getMany();
+
     return {
-      message: 'TODO: Nguyễn Thị Cẩm Vân viết logic lọc phim nâng cao',
-      filterCriteria: filter,
-      data: [],
+      message: 'Tìm kiếm và lọc phim thành công',
+      data: {
+        total: items.length,
+        filterCriteria: filter,
+        items,
+      },
     };
   }
 }
