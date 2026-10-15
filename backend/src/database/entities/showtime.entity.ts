@@ -12,46 +12,68 @@ import {
 import { Movie } from './movie.entity';
 import { CinemaRoom } from './cinema-room.entity';
 import { Booking } from './booking.entity';
+import { ShowtimeStatus } from '../../common/enums';
 
 @Entity('showtimes')
 export class Showtime {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'showtime_id' })
   id: number;
 
   @Index('idx_showtime_movie_id')
-  @Column()
+  @Column({ name: 'movie_id' })
   movieId: number;
 
   @Index('idx_showtime_room_id')
-  @Column()
+  @Column({ name: 'room_id' })
   roomId: number;
 
   @Index('idx_showtime_start_time')
-  @Column({ type: 'datetime' })
+  @Column({ name: 'start_time', type: 'datetime' })
   startTime: Date;
 
-  @Column({ type: 'datetime' })
+  @Column({ name: 'end_time', type: 'datetime' })
   endTime: Date;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 90000.0 })
+  @Column({
+    name: 'base_price',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 90000.0,
+  })
   basePrice: number;
 
-  @ManyToOne(() => Movie, (movie) => movie.showtimes, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'movieId' })
+  @Column({
+    name: 'cleanup_minutes',
+    type: 'smallint',
+    unsigned: true,
+    default: 15,
+  })
+  cleanupMinutes: number;
+
+  @Column({
+    type: 'enum',
+    enum: ShowtimeStatus,
+    default: ShowtimeStatus.SCHEDULED,
+  })
+  status: ShowtimeStatus;
+
+  @ManyToOne(() => Movie, (movie) => movie.showtimes, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'movie_id' })
   movie: Movie;
 
   @ManyToOne(() => CinemaRoom, (room) => room.showtimes, {
-    onDelete: 'CASCADE',
+    onDelete: 'RESTRICT',
   })
-  @JoinColumn({ name: 'roomId' })
+  @JoinColumn({ name: 'room_id' })
   room: CinemaRoom;
 
   @OneToMany(() => Booking, (booking) => booking.showtime)
   bookings: Booking[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

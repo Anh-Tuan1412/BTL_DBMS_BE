@@ -12,20 +12,20 @@ import { Booking } from './booking.entity';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'user_id' })
   id: number;
 
   @Index('idx_user_email', { unique: true })
   @Column({ unique: true, length: 150 })
   email: string;
 
-  @Column({ select: false })
+  @Column({ name: 'password_hash', select: false })
   password: string;
 
-  @Column({ length: 100 })
+  @Column({ name: 'fullname', length: 100 })
   fullName: string;
 
-  @Column({ length: 20, nullable: true })
+  @Column({ name: 'phone', length: 20, nullable: true, unique: true })
   phoneNumber: string;
 
   @Column({
@@ -35,12 +35,19 @@ export class User {
   })
   role: UserRole;
 
+  @Column({
+    type: 'enum',
+    enum: ['ACTIVE', 'INACTIVE', 'BANNED'],
+    default: 'ACTIVE',
+  })
+  status: string;
+
   @OneToMany(() => Booking, (booking) => booking.user)
   bookings: Booking[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

@@ -7,71 +7,73 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
-  Index,
 } from 'typeorm';
-import { BookingStatus, PaymentStatus } from '../../common/enums';
+import { BookingStatus } from '../../common/enums';
 import { User } from './user.entity';
 import { Showtime } from './showtime.entity';
 import { Ticket } from './ticket.entity';
+import { Payment } from './payment.entity';
 
 @Entity('bookings')
 export class Booking {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'booking_id' })
   id: number;
-
-  @Index('idx_booking_code', { unique: true })
-  @Column({ length: 50, unique: true })
+  @Column({ name: 'booking_code', length: 50, unique: true })
   bookingCode: string;
-
-  @Index('idx_booking_user_id')
-  @Column()
+  @Column({ name: 'user_id' })
   userId: number;
-
-  @Index('idx_booking_showtime_id')
-  @Column()
+  @Column({ name: 'showtime_id' })
   showtimeId: number;
-
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0.0 })
-  totalAmount: number;
-
-  @Index('idx_booking_status')
+  @Column({ name: 'voucher_id', type: 'int', nullable: true })
+  voucherId: number | null;
   @Column({
+    name: 'total_amount',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
+  totalAmount: number;
+  @Column({
+    name: 'discount_amount',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
+  discountAmount: number;
+  @Column({
+    name: 'booking_status',
     type: 'enum',
     enum: BookingStatus,
     default: BookingStatus.PENDING,
   })
   status: BookingStatus;
-
-  @Index('idx_payment_status')
+  @Column({ name: 'hold_expires_at', type: 'datetime', nullable: true })
+  holdExpiresAt: Date | null;
+  @Column({ name: 'cancelled_at', type: 'datetime', nullable: true })
+  cancelledAt: Date | null;
   @Column({
-    type: 'enum',
-    enum: PaymentStatus,
-    default: PaymentStatus.PENDING,
+    name: 'cancellation_reason',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
   })
-  paymentStatus: PaymentStatus;
-
-  @Column({ length: 50, default: 'STRIPE' })
-  paymentMethod: string;
-
-  @Column({ length: 100, nullable: true })
-  paymentTransactionId: string;
-
-  @ManyToOne(() => User, (user) => user.bookings, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'userId' })
+  cancellationReason: string | null;
+  @ManyToOne(() => User, (user) => user.bookings, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
-
   @ManyToOne(() => Showtime, (showtime) => showtime.bookings, {
-    onDelete: 'CASCADE',
+    onDelete: 'RESTRICT',
   })
-  @JoinColumn({ name: 'showtimeId' })
+  @JoinColumn({ name: 'showtime_id' })
   showtime: Showtime;
-
-  @OneToMany(() => Ticket, (ticket) => ticket.booking, { cascade: true })
+  @OneToMany(() => Ticket, (ticket) => ticket.booking)
   tickets: Ticket[];
-
-  @CreateDateColumn()
+  @OneToMany(() => Payment, (payment) => payment.booking)
+  payments: Payment[];
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
-
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

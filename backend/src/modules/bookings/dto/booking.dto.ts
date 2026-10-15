@@ -5,15 +5,21 @@ import {
   ArrayMinSize,
   IsOptional,
   IsString,
+  IsObject,
+  ArrayUnique,
+  Min,
+  IsIn,
 } from 'class-validator';
 
 export class HoldSeatDto {
   @ApiProperty({ example: 1, description: 'ID suất chiếu' })
   @IsInt()
+  @Min(1)
   showtimeId: number;
 
   @ApiProperty({ example: 5, description: 'ID ghế cần giữ' })
   @IsInt()
+  @Min(1)
   seatId: number;
 }
 
@@ -25,6 +31,10 @@ export class ReleaseSeatDto {
   @ApiProperty({ example: 5, description: 'ID ghế cần giải phóng' })
   @IsInt()
   seatId: number;
+
+  @ApiProperty({ description: 'Token được trả về khi giữ ghế' })
+  @IsString()
+  holdToken: string;
 }
 
 export class CreateBookingDto {
@@ -35,7 +45,17 @@ export class CreateBookingDto {
   @ApiProperty({ example: [5, 6], description: 'Danh sách các ID ghế đặt vé' })
   @IsArray()
   @ArrayMinSize(1, { message: 'Phải chọn ít nhất 1 ghế' })
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
   seatIds: number[];
+
+  @ApiProperty({
+    example: { '5': 'userId:uuid', '6': 'userId:uuid' },
+    description: 'Map seatId → token giữ ghế',
+  })
+  @IsObject()
+  holdTokens: Record<string, string>;
 
   @ApiProperty({
     example: 'STRIPE',
@@ -44,6 +64,7 @@ export class CreateBookingDto {
   })
   @IsOptional()
   @IsString()
+  @IsIn(['STRIPE'])
   paymentMethod?: string;
 }
 

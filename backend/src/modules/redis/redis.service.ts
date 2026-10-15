@@ -6,76 +6,54 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private client: Redis;
 
-  constructor(private configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
-    const host = this.configService.get<string>('REDIS_HOST', 'localhost');
-    const port = Number(this.configService.get<number>('REDIS_PORT', 6379));
-    const password = this.configService.get<string>('REDIS_PASSWORD');
-
     this.client = new Redis({
-      host,
-      port,
-      password: password || undefined,
-      retryStrategy: (times) => {
-        // Retry every 3 seconds, up to 10 times
-        if (times > 10) {
-          this.logger.warn('Redis reconnection limit reached');
-          return null;
-        }
-        return Math.min(times * 1000, 3000);
-      },
+      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+      port: Number(this.configService.get('REDIS_PORT', 6379)),
+      password: this.configService.get<string>('REDIS_PASSWORD') || undefined,
       lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      commandTimeout: 3000,
+      retryStrategy: (times) =>
+        times > 10 ? null : Math.min(times * 1000, 3000),
     });
-
-    this.client
+    this.client.on('error', (error: Error) => this.logger.warn(error.message));
+    void this.client
       .connect()
-      .then(() => {
-        this.logger.log(`Connected to Redis at ${host}:${port}`);
-      })
-      .catch((err) => {
-        this.logger.warn(
-          `Redis connection error (${err.message}). Make sure Redis is running via Docker ('docker compose up -d').`,
-        );
-      });
+      .catch((error: Error) => this.logger.warn(error.message));
   }
 
   async onModuleDestroy() {
-    if (this.client) {
-      await this.client.quit();
-    }
+    this.client?.disconnect();
   }
 
   getClient(): Redis {
     return this.client;
   }
 
-  // --- Generic Cache Methods ---
   async get(key: string): Promise<string | null> {
     try {
       return await this.client.get(key);
-    } catch (error) {
-      this.logger.error(`Error getting key ${key}: ${error.message}`);
+    } catch {
       return null;
     }
   }
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<boolean> {
     try {
-      if (ttlSeconds) {
-        await this.client.set(key, value, 'EX', ttlSeconds);
-      } else {
-        await this.client.set(key, value);
-      }
+      if (ttlSeconds) await this.client.set(key, value, 'EX', ttlSeconds);
+      else await this.client.set(key, value);
       return true;
-    } catch (error) {
-      this.logger.error(`Error setting key ${key}: ${error.message}`);
+    } catch {
       return false;
     }
   }
@@ -84,135 +62,112 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.client.del(key);
       return true;
-    } catch (error) {
-      this.logger.error(`Error deleting key ${key}: ${error.message}`);
+    } catch {
       return false;
     }
   }
 
-  // --- UC7: Seat Holding with Redis TTL & Concurrency Control ---
-  private getSeatKey(showtimeId: number, seatId: number): string {
+  private seatKey(showtimeId: number, seatId: number): string {
     return `seat_lock:showtime:${showtimeId}:seat:${seatId}`;
   }
 
-  /**
-   * Giữ ghế tạm thời bằng Redis SET NX EX (Atomic)
-   * @param showtimeId ID suất chiếu
-   * @param seatId ID ghế
-   * @param userId ID người dùng giữ ghế
-   * @param ttlSeconds Thời gian giữ ghế (mặc định 300s = 5 phút)
-   */
-  async holdSeat(
-    showtimeId: number,
-    seatId: number,
-    userId: number,
-    ttlSeconds = 300,
-  ): Promise<{ success: boolean; message: string; remainingTtl?: number }> {
-    try {
-      const key = this.getSeatKey(showtimeId, seatId);
-      // SET key value EX ttl NX (chỉ set nếu key chưa tồn tại)
-      const result = await this.client.set(
-        key,
-        userId.toString(),
-        'EX',
-        ttlSeconds,
-        'NX',
-      );
-
-      if (result === 'OK') {
-        return {
-          success: true,
-          message: `Giữ ghế thành công trong ${ttlSeconds} giây (5 phút)`,
-          remainingTtl: ttlSeconds,
-        };
-      }
-
-      // Nếu đã có người giữ ghế, kiểm tra xem có phải chính user này giữ không
-      const currentHolder = await this.client.get(key);
-      const remainingTtl = await this.client.ttl(key);
-
-      if (currentHolder === userId.toString()) {
-        return {
-          success: true,
-          message: 'Bạn đang giữ ghế này',
-          remainingTtl: remainingTtl > 0 ? remainingTtl : 0,
-        };
-      }
-
-      return {
-        success: false,
-        message: 'Ghế này đang được người khác chọn/giữ tạm thời',
-        remainingTtl: remainingTtl > 0 ? remainingTtl : 0,
-      };
-    } catch (error) {
-      this.logger.error(
-        `Error holding seat ${seatId} for showtime ${showtimeId}: ${error.message}`,
-      );
-      return { success: false, message: 'Lỗi hệ thống khi giữ ghế' };
-    }
+  // Returning an existing owner's token does not renew the original five-minute TTL.
+  async holdSeat(showtimeId: number, seatId: number, userId: number) {
+    const token = `${userId}:${randomUUID()}`;
+    const result = (await this.client.eval(
+      `
+      local existing = redis.call('GET', KEYS[1])
+      if not existing then
+        redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', 300)
+        return {ARGV[1], 300000}
+      end
+      if string.sub(existing, 1, string.len(ARGV[2])) == ARGV[2] then
+        return {existing, redis.call('PTTL', KEYS[1])}
+      end
+      return {'', redis.call('PTTL', KEYS[1])}
+    `,
+      1,
+      this.seatKey(showtimeId, seatId),
+      token,
+      `${userId}:`,
+    )) as [string, number];
+    return {
+      success: Boolean(result[0]) && result[1] > 0,
+      holdToken: result[0] || undefined,
+      remainingTtl: Math.max(0, Math.floor(result[1] / 1000)),
+    };
   }
 
-  /**
-   * Giải phóng ghế tạm thời khi user bỏ chọn hoặc hết hạn/hủy
-   */
+  // Atomic read of owner and expiry. Redis failures propagate for booking operations.
+  async getHold(
+    showtimeId: number,
+    seatId: number,
+  ): Promise<{ token: string; ttlMs: number } | null> {
+    const result = (await this.client.eval(
+      `
+      local token = redis.call('GET', KEYS[1])
+      if not token then return {'', -2} end
+      return {token, redis.call('PTTL', KEYS[1])}
+    `,
+      1,
+      this.seatKey(showtimeId, seatId),
+    )) as [string, number];
+    return result[0] && result[1] > 0
+      ? { token: result[0], ttlMs: result[1] }
+      : null;
+  }
+
+  // A stale request can never delete a newer hold, even for the same user.
   async releaseSeat(
     showtimeId: number,
     seatId: number,
-    userId: number,
-    force = false,
+    token: string,
   ): Promise<boolean> {
-    try {
-      const key = this.getSeatKey(showtimeId, seatId);
-      const currentHolder = await this.client.get(key);
-
-      if (!currentHolder) {
-        return true;
-      }
-
-      if (force || currentHolder === userId.toString()) {
-        await this.client.del(key);
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      this.logger.error(`Error releasing seat ${seatId}: ${error.message}`);
-      return false;
-    }
+    return (
+      Number(
+        await this.client.eval(
+          `
+      local current = redis.call('GET', KEYS[1])
+      if not current then return 1 end
+      if current ~= ARGV[1] then return 0 end
+      return redis.call('DEL', KEYS[1])
+    `,
+          1,
+          this.seatKey(showtimeId, seatId),
+          token,
+        ),
+      ) === 1
+    );
   }
 
-  /**
-   * Lấy danh sách tất cả các ghế đang được giữ tạm thời của một suất chiếu
-   */
   async getHeldSeatsForShowtime(
     showtimeId: number,
   ): Promise<{ seatId: number; userId: number; ttl: number }[]> {
-    try {
-      const pattern = `seat_lock:showtime:${showtimeId}:seat:*`;
-      const keys = await this.client.keys(pattern);
-      const heldSeats: { seatId: number; userId: number; ttl: number }[] = [];
-
-      for (const key of keys) {
-        const parts = key.split(':');
-        const seatId = Number(parts[parts.length - 1]);
-        const userIdStr = await this.client.get(key);
-        const ttl = await this.client.ttl(key);
-
-        if (userIdStr && ttl > 0) {
-          heldSeats.push({
-            seatId,
-            userId: Number(userIdStr),
-            ttl,
-          });
-        }
-      }
-
-      return heldSeats;
-    } catch (error) {
-      this.logger.error(
-        `Error getting held seats for showtime ${showtimeId}: ${error.message}`,
+    const held: { seatId: number; userId: number; ttl: number }[] = [];
+    const seen = new Set<string>();
+    let cursor = '0';
+    do {
+      const page = await this.client.scan(
+        cursor,
+        'MATCH',
+        `seat_lock:showtime:${showtimeId}:seat:*`,
+        'COUNT',
+        100,
       );
-      return [];
-    }
+      cursor = page[0];
+      for (const key of page[1]) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const seatId = Number(key.split(':').pop());
+        const hold = await this.getHold(showtimeId, seatId);
+        if (hold)
+          held.push({
+            seatId,
+            userId: Number(hold.token.split(':')[0]),
+            ttl: Math.floor(hold.ttlMs / 1000),
+          });
+      }
+    } while (cursor !== '0');
+    return held;
   }
 }

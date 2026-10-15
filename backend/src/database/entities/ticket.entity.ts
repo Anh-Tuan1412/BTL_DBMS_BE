@@ -3,50 +3,45 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-  Index,
+  Unique,
 } from 'typeorm';
 import { Booking } from './booking.entity';
 import { Seat } from './seat.entity';
 
-@Entity('tickets')
+@Entity('booking_details')
+@Unique(['bookingId', 'seatId'])
 export class Ticket {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'booking_detail_id' })
   id: number;
-
-  @Index('idx_ticket_code', { unique: true })
-  @Column({ length: 50, unique: true })
+  @Column({ name: 'ticket_code', length: 50, unique: true })
   ticketCode: string;
-
-  @Index('idx_ticket_booking_id')
-  @Column()
+  @Column({ name: 'hold_token', length: 100, select: false })
+  holdToken: string;
+  @Column({ name: 'booking_id' })
   bookingId: number;
-
-  @Index('idx_ticket_seat_id')
-  @Column()
+  @Column({ name: 'showtime_id' })
+  showtimeId: number;
+  @Column({ name: 'seat_id' })
   seatId: number;
-
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ name: 'ticket_price', type: 'decimal', precision: 10, scale: 2 })
   price: number;
-
-  @Column({ length: 20, default: 'VALID' })
-  status: string; // VALID, USED, REFUNDED
-
-  @ManyToOne(() => Booking, (booking) => booking.tickets, {
-    onDelete: 'CASCADE',
+  @Column({
+    name: 'ticket_status',
+    type: 'enum',
+    enum: ['PENDING', 'VALID', 'USED', 'CANCELLED', 'EXPIRED', 'REFUNDED'],
+    default: 'PENDING',
   })
-  @JoinColumn({ name: 'bookingId' })
+  status: string;
+  @ManyToOne(() => Booking, (booking) => booking.tickets, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'booking_id' })
   booking: Booking;
-
   @ManyToOne(() => Seat, (seat) => seat.tickets, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'seatId' })
+  @JoinColumn({ name: 'seat_id' })
   seat: Seat;
-
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
 }

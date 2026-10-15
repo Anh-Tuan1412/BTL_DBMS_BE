@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Seat } from '../../database/entities/seat.entity';
@@ -56,21 +60,87 @@ export class SeatsService {
   }
 
   // =========================================================================
-  // TODO: Nguyễn Thị Cẩm Vân - Hiện thực UC6: Xem sơ đồ và trạng thái ghế
+  // UC6: Xem sơ đồ và trạng thái ghế
   // Kết hợp MySQL (ghế đã đặt) và Redis (ghế đang giữ tạm thời)
   // =========================================================================
 
   async getSeatMatrixForShowtime(showtimeId: number, currentUserId?: number) {
-    // TODO: Vân viết logic tổng hợp trạng thái từng ghế:
-    // 1. Lấy tất cả ghế phòng chiếu từ MySQL
-    // 2. Lấy vé đã đặt từ bảng tickets (MySQL) -> Trạng thái BOOKED
-    // 3. Lấy ghế đang giữ từ Redis (TTL 5p) -> Trạng thái HOLDING
-    // 4. Các ghế còn lại -> AVAILABLE
+    const showtime = await this.showtimeRepository.findOneBy({
+      id: showtimeId,
+    });
+    if (!showtime) throw new NotFoundException('Không tìm thấy suất chiếu');
+    const seats = await this.seatRepository.find({
+      where: { roomId: showtime.roomId },
+      order: { row: 'ASC', column: 'ASC' },
+    });
+    const allocations: {
+      seat_id: number;
+      seat_status: string;
+      user_id: number;
+      hold_expires_at: Date | null;
+    }[] = await this.seatRepository.query(
+      `
+      SELECT s.seat_id, s.seat_status, b.user_id, b.hold_expires_at
+      FROM showtime_seats s JOIN bookings b ON b.booking_id = s.booking_id
+      WHERE s.showtime_id = ? AND (s.seat_status = 'BOOKED' OR
+        (s.seat_status = 'PENDING' AND b.hold_expires_at > UTC_TIMESTAMP()))`,
+      [showtimeId],
+    );
+    let held: Awaited<ReturnType<RedisService['getHeldSeatsForShowtime']>>;
+    try {
+      held = await this.redisService.getHeldSeatsForShowtime(showtimeId);
+    } catch {
+      throw new ServiceUnavailableException(
+        'Redis chưa sẵn sàng để đọc trạng thái giữ ghế',
+      );
+    }
+    const inventory = new Map(allocations.map((seat) => [seat.seat_id, seat]));
+    const holds = new Map(held.map((seat) => [seat.seatId, seat]));
     return {
-      message: `TODO: Vân viết logic tổng hợp sơ đồ trạng thái ghế cho suất chiếu ID ${showtimeId}`,
       showtimeId,
-      currentUserId,
-      seats: [],
+      seats: seats.map((seat) => {
+        const allocated = inventory.get(seat.id);
+        const hold = holds.get(seat.id);
+        const status =
+          allocated?.seat_status === 'BOOKED'
+            ? 'BOOKED'
+            : seat.status === 'INACTIVE'
+              ? 'INACTIVE'
+              : allocated || hold
+                ? 'HOLDING'
+                : 'AVAILABLE';
+        return {
+          id: seat.id,
+          row: seat.row,
+          column: seat.column,
+          seatNumber: seat.seatNumber,
+          type: seat.seatType.name,
+          priceMultiplier: Number(seat.seatType.priceCoefficient),
+          status,
+          isHeldByMe:
+            status === 'HOLDING' &&
+            (allocated
+              ? allocated.user_id === currentUserId
+              : hold?.userId === currentUserId),
+          canRelease:
+            status === 'HOLDING' &&
+            !allocated &&
+            hold?.userId === currentUserId,
+          remainingTtl:
+            status !== 'HOLDING'
+              ? 0
+              : allocated?.hold_expires_at
+                ? Math.max(
+                    0,
+                    Math.floor(
+                      (new Date(allocated.hold_expires_at).getTime() -
+                        Date.now()) /
+                        1000,
+                    ),
+                  )
+                : (hold?.ttl ?? 0),
+        };
+      }),
     };
   }
 }
