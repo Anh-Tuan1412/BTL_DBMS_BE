@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, IsDateString } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsDateString,
+  Matches,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class SearchMovieDto {
@@ -24,6 +30,7 @@ export class SearchMovieDto {
   @ApiPropertyOptional({ description: 'Lọc theo ngày chiếu (YYYY-MM-DD)' })
   @IsOptional()
   @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Ngày phải có dạng YYYY-MM-DD' })
   date?: string;
 
   @ApiPropertyOptional({ description: 'Khoảng giá vé tối thiểu' })

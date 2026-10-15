@@ -1,66 +1,198 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Showtime } from '../../database/entities/showtime.entity';
-import { Movie } from '../../database/entities/movie.entity';
-import { CinemaRoom } from '../../database/entities/cinema-room.entity';
-import { CreateShowtimeDto } from './dto/showtime.dto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { DataSource, EntityManager } from 'typeorm';
+import { Showtime, Movie, CinemaRoom, Booking } from '../../database/entities';
+import { BookingStatus, ShowtimeStatus, MovieStatus } from '../../common/enums';
+import { CreateShowtimeDto, UpdateShowtimeDto } from './dto/showtime.dto';
 
 @Injectable()
 export class ShowtimesService {
-  constructor(
-    @InjectRepository(Showtime)
-    private readonly showtimeRepository: Repository<Showtime>,
-    @InjectRepository(Movie)
-    private readonly movieRepository: Repository<Movie>,
-    @InjectRepository(CinemaRoom)
-    private readonly roomRepository: Repository<CinemaRoom>,
-  ) {}
-
-  // =========================================================================
-  // TODO: Đặng Minh Quang - Hiện thực UC4: Quản lý suất chiếu
-  // =========================================================================
+  constructor(private readonly dataSource: DataSource) {}
 
   async findAll() {
-    // TODO: Viết logic lấy danh sách tất cả các suất chiếu
-    return {
-      message: 'TODO: Quang viết logic lấy danh sách suất chiếu',
-      data: [],
-    };
+    return this.dataSource.getRepository(Showtime).find({
+      relations: { movie: true, room: { cinema: true } },
+      order: { startTime: 'ASC' },
+    });
   }
 
   async findByMovie(movieId: number) {
-    // TODO: Viết logic lấy suất chiếu theo từng phim
-    return {
-      message: `TODO: Quang viết logic lấy suất chiếu của phim ID ${movieId}`,
-      movieId,
-      data: [],
-    };
+    return this.dataSource.getRepository(Showtime).find({
+      where: { movieId },
+      relations: { room: { cinema: true } },
+      order: { startTime: 'ASC' },
+    });
   }
 
   async findOne(id: number) {
-    // TODO: Viết logic xem chi tiết một suất chiếu
-    return {
-      message: `TODO: Quang viết logic xem chi tiết suất chiếu ID ${id}`,
-      showtimeId: id,
-    };
+    const showtime = await this.dataSource.getRepository(Showtime).findOne({
+      where: { id },
+      relations: { movie: true, room: { cinema: true } },
+    });
+    if (!showtime) throw new NotFoundException('Không tìm thấy suất chiếu');
+    return showtime;
+  }
+
+  private async validate(
+    manager: EntityManager,
+    dto: CreateShowtimeDto,
+    excludeId = 0,
+  ) {
+    const start = new Date(dto.startTime);
+    const end = new Date(dto.endTime);
+    const cleanup = dto.cleanupMinutes ?? 15;
+    if (
+      !Number.isFinite(start.getTime()) ||
+      !Number.isFinite(end.getTime()) ||
+      end <= start ||
+      start <= new Date()
+    ) {
+      throw new BadRequestException(
+        'Thời gian suất chiếu không hợp lệ hoặc đã qua',
+      );
+    }
+    const movie = await manager.findOneBy(Movie, { id: dto.movieId });
+    if (!movie || movie.status === MovieStatus.END_OF_SHOW)
+      throw new BadRequestException('Phim không khả dụng');
+    if (end.getTime() - start.getTime() < movie.durationMinutes * 60000) {
+      throw new BadRequestException(
+        'Thời gian suất chiếu phải đủ thời lượng phim',
+      );
+    }
+    const overlaps = await manager.query(
+      `
+      SELECT showtime_id FROM showtimes
+      WHERE room_id = ? AND showtime_id <> ? AND status <> 'CANCELLED'
+        AND start_time < DATE_ADD(?, INTERVAL ? MINUTE)
+        AND DATE_ADD(end_time, INTERVAL cleanup_minutes MINUTE) > ?
+      LIMIT 1`,
+      [dto.roomId, excludeId, end, cleanup, start],
+    );
+    if (overlaps.length)
+      throw new ConflictException('Trùng lịch chiếu hoặc thời gian dọn phòng');
+    return { start, end, cleanup };
+  }
+
+  private async lockRoom(manager: EntityManager, roomId: number) {
+    const room = await manager.findOne(CinemaRoom, {
+      where: { id: roomId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!room || room.status !== 'ACTIVE')
+      throw new BadRequestException('Phòng chiếu không khả dụng');
   }
 
   async create(dto: CreateShowtimeDto) {
-    // TODO: Viết logic tạo suất chiếu mới:
-    // 1. Kiểm tra tồn tại của Movie và CinemaRoom
-    // 2. Kiểm tra xung đột lịch chiếu trong cùng phòng (Overlap time)
-    // 3. Lưu suất chiếu mới vào MySQL
-    return {
-      message: 'TODO: Quang viết logic tạo suất chiếu mới',
-      payload: dto,
-    };
+    return this.dataSource.transaction('READ COMMITTED', async (manager) => {
+      // Serialize scheduling even when this room has no screenings yet.
+      await this.lockRoom(manager, dto.roomId);
+      const { start, end, cleanup } = await this.validate(manager, dto);
+      const showtime = await manager.save(
+        Showtime,
+        manager.create(Showtime, {
+          movieId: dto.movieId,
+          roomId: dto.roomId,
+          startTime: start,
+          endTime: end,
+          basePrice: dto.basePrice,
+          cleanupMinutes: cleanup,
+          status: ShowtimeStatus.SCHEDULED,
+        }),
+      );
+      await manager.query(
+        `INSERT INTO showtime_seats (showtime_id, seat_id, room_id)
+        SELECT ?, seat_id, room_id FROM seats WHERE room_id = ? AND status = 'AVAILABLE'`,
+        [showtime.id, dto.roomId],
+      );
+      return showtime;
+    });
+  }
+
+  async update(id: number, dto: UpdateShowtimeDto) {
+    const previous = await this.findOne(id);
+    return this.dataSource.transaction('READ COMMITTED', async (manager) => {
+      const roomIds = [
+        ...new Set([previous.roomId, dto.roomId ?? previous.roomId]),
+      ].sort((a, b) => a - b);
+      for (const roomId of roomIds) await this.lockRoom(manager, roomId);
+      const showtime = await manager.findOne(Showtime, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!showtime) throw new NotFoundException('Không tìm thấy suất chiếu');
+      if (showtime.roomId !== previous.roomId)
+        throw new ConflictException('Suất chiếu vừa thay đổi, hãy tải lại');
+      if (showtime.status !== ShowtimeStatus.SCHEDULED)
+        throw new ConflictException('Chỉ sửa suất chưa chiếu');
+      // Historical bookings must retain their screening information and prices.
+      if (await manager.count(Booking, { where: { showtimeId: id } })) {
+        throw new ConflictException('Không sửa suất chiếu đã có booking');
+      }
+      const merged: CreateShowtimeDto = {
+        movieId: dto.movieId ?? showtime.movieId,
+        roomId: dto.roomId ?? showtime.roomId,
+        startTime: dto.startTime ?? showtime.startTime.toISOString(),
+        endTime: dto.endTime ?? showtime.endTime.toISOString(),
+        basePrice: dto.basePrice ?? Number(showtime.basePrice),
+        cleanupMinutes: dto.cleanupMinutes ?? showtime.cleanupMinutes,
+      };
+      const { start, end, cleanup } = await this.validate(manager, merged, id);
+      await manager.query('DELETE FROM showtime_seats WHERE showtime_id = ?', [
+        id,
+      ]);
+      Object.assign(showtime, {
+        movieId: merged.movieId,
+        roomId: merged.roomId,
+        startTime: start,
+        endTime: end,
+        basePrice: merged.basePrice,
+        cleanupMinutes: cleanup,
+      });
+      await manager.save(showtime);
+      await manager.query(
+        `INSERT INTO showtime_seats (showtime_id, seat_id, room_id)
+        SELECT ?, seat_id, room_id FROM seats WHERE room_id = ? AND status = 'AVAILABLE'`,
+        [id, merged.roomId],
+      );
+      return showtime;
+    });
   }
 
   async remove(id: number) {
-    // TODO: Viết logic xóa suất chiếu
-    return {
-      message: `TODO: Quang viết logic xóa suất chiếu ID ${id}`,
-    };
+    const previous = await this.findOne(id);
+    return this.dataSource.transaction('READ COMMITTED', async (manager) => {
+      await this.lockRoom(manager, previous.roomId);
+      const showtime = await manager.findOne(Showtime, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!showtime) throw new NotFoundException('Không tìm thấy suất chiếu');
+      if (showtime.roomId !== previous.roomId)
+        throw new ConflictException('Suất chiếu vừa thay đổi, hãy tải lại');
+      if (showtime.status === ShowtimeStatus.CANCELLED) return showtime;
+      if (
+        showtime.status !== ShowtimeStatus.SCHEDULED ||
+        showtime.startTime <= new Date()
+      ) {
+        throw new ConflictException('Chỉ hủy suất chưa chiếu');
+      }
+      const active = await manager
+        .createQueryBuilder(Booking, 'b')
+        .where('b.showtimeId = :id', { id })
+        .andWhere('b.status IN (:...statuses)', {
+          statuses: [BookingStatus.PENDING, BookingStatus.CONFIRMED],
+        })
+        .getCount();
+      if (active)
+        throw new ConflictException(
+          'Cần xử lý các booking hiện hành trước khi hủy suất',
+        );
+      showtime.status = ShowtimeStatus.CANCELLED;
+      return manager.save(showtime);
+    });
   }
 }

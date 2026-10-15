@@ -1,5 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsDateString, IsNumber, Min } from 'class-validator';
+import { ApiProperty, PartialType } from '@nestjs/swagger';
+import {
+  IsInt,
+  IsDateString,
+  IsNumber,
+  Min,
+  IsOptional,
+  Max,
+} from 'class-validator';
 
 export class CreateShowtimeDto {
   @ApiProperty({ example: 1, description: 'ID phim' })
@@ -28,4 +35,17 @@ export class CreateShowtimeDto {
   @IsNumber()
   @Min(0)
   basePrice: number;
+
+  @ApiProperty({
+    default: 15,
+    required: false,
+    description: 'Số phút dọn phòng sau suất chiếu',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  cleanupMinutes?: number;
 }
+
+export class UpdateShowtimeDto extends PartialType(CreateShowtimeDto) {}

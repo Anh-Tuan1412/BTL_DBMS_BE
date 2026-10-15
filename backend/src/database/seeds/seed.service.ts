@@ -1,14 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, Movie, Cinema, CinemaRoom, Seat, Showtime, Booking, Ticket } from '../entities';
-import { UserRole, SeatType, MovieStatus, BookingStatus, PaymentStatus } from '../../common/enums';
+import {
+  User,
+  Movie,
+  Cinema,
+  CinemaRoom,
+  Seat,
+  SeatTypeEntity,
+  Genre,
+} from '../entities';
+import { ShowtimesService } from '../../modules/showtimes/showtimes.service';
+import { UserRole, SeatType, MovieStatus } from '../../common/enums';
 
 @Injectable()
 export class SeedService {
   private readonly logger = new Logger(SeedService.name);
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly showtimesService: ShowtimesService,
+  ) {}
 
   async runSeed() {
     this.logger.log('Bắt đầu khởi tạo dữ liệu mẫu (Seed Data)...');
@@ -18,774 +30,186 @@ export class SeedService {
     const cinemaRepo = this.dataSource.getRepository(Cinema);
     const roomRepo = this.dataSource.getRepository(CinemaRoom);
     const seatRepo = this.dataSource.getRepository(Seat);
-    const showtimeRepo = this.dataSource.getRepository(Showtime);
+    const typeRepo = this.dataSource.getRepository(SeatTypeEntity);
+    await typeRepo
+      .createQueryBuilder()
+      .insert()
+      .values([
+        { name: SeatType.REGULAR, priceCoefficient: 1 },
+        { name: SeatType.VIP, priceCoefficient: 1.2 },
+        { name: SeatType.COUPLE, priceCoefficient: 1.5 },
+      ])
+      .orIgnore()
+      .updateEntity(false)
+      .execute();
+    const types = await typeRepo.find();
+    const genreRepo = this.dataSource.getRepository(Genre);
+    const genreNames = [
+      'Khoa học viễn tưởng',
+      'Phiêu lưu',
+      'Tiểu sử',
+      'Lịch sử',
+      'Chính kịch',
+    ];
+    await genreRepo
+      .createQueryBuilder()
+      .insert()
+      .values(genreNames.map((name) => ({ name })))
+      .orIgnore()
+      .updateEntity(false)
+      .execute();
+    const genres = await genreRepo.find();
 
     // 1. Tạo Users mẫu (Admin & Customer)
-    const rawUsers = [
-      {
-        email: 'ha.quach@cinema.vn',
-        fullName: 'Quách Văn Hà',
-        phoneNumber: '0901234567',
-        role: UserRole.ADMIN,
-        rawPassword: 'HaQuach@Admin2026',
-      },
-      {
-        email: 'long.nguyen@cinema.vn',
-        fullName: 'Nguyễn Hoàng Long',
-        phoneNumber: '0908889999',
-        role: UserRole.ADMIN,
-        rawPassword: 'LongNguyen@Admin88',
-      },
-      {
-        email: 'nam.tran@cinema.vn',
-        fullName: 'Trần Bảo Nam',
-        phoneNumber: '0902223344',
-        role: UserRole.ADMIN,
-        rawPassword: 'BaoNam#Admin2026',
-      },
-      {
-        email: 'thao.le@cinema.vn',
-        fullName: 'Lê Phương Thảo',
-        phoneNumber: '0903334455',
-        role: UserRole.ADMIN,
-        rawPassword: 'PhuongThao!Admin99',
-      },
-      {
-        email: 'mai.tran@gmail.com',
-        fullName: 'Trần Thị Mai',
-        phoneNumber: '0981112233',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'MaiTran@Pass123',
-      },
-      {
-        email: 'duc.pham@gmail.com',
-        fullName: 'Phạm Minh Đức',
-        phoneNumber: '0982223344',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'MinhDuc#Secure89',
-      },
-      {
-        email: 'linh.vu@gmail.com',
-        fullName: 'Vũ Thảo Linh',
-        phoneNumber: '0983334455',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'ThaoLinh@2026!',
-      },
-      {
-        email: 'huy.dang@gmail.com',
-        fullName: 'Đặng Quốc Huy',
-        phoneNumber: '0984445566',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'QuocHuy$9988',
-      },
-      {
-        email: 'anh.bui@gmail.com',
-        fullName: 'Bùi Ngọc Ánh',
-        phoneNumber: '0985556677',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'NgocAnh_Cinema@1',
-      },
-      {
-        email: 'long.do@gmail.com',
-        fullName: 'Đỗ Thành Long',
-        phoneNumber: '0986667788',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'ThanhLong#Pass77',
-      },
-      {
-        email: 'my.ho@gmail.com',
-        fullName: 'Hồ Diệu My',
-        phoneNumber: '0987778899',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'DieuMy@LoveMovie',
-      },
-      {
-        email: 'khai.ngo@gmail.com',
-        fullName: 'Ngô Quang Khải',
-        phoneNumber: '0988889900',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'KhaiNgo@Secret12',
-      },
-      {
-        email: 'hang.duong@gmail.com',
-        fullName: 'Dương Thúy Hằng',
-        phoneNumber: '0989990011',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'ThuyHang!Cinema26',
-      },
-      {
-        email: 'bao.ly@gmail.com',
-        fullName: 'Lý Gia Bảo',
-        phoneNumber: '0971112233',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'GiaBao$Fast2026',
-      },
-      {
-        email: 'thu.phan@gmail.com',
-        fullName: 'Phan Hoài Thu',
-        phoneNumber: '0972223344',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'HoaiThu@Movie2026',
-      },
-      {
-        email: 'tung.trinh@gmail.com',
-        fullName: 'Trịnh Thanh Tùng',
-        phoneNumber: '0973334455',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'ThanhTung#Pass99',
-      },
-      {
-        email: 'quynh.vo@gmail.com',
-        fullName: 'Võ Trúc Quỳnh',
-        phoneNumber: '0974445566',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'TrucQuynh$Cinema8',
-      },
-      {
-        email: 'bach.mai@gmail.com',
-        fullName: 'Mai Xuân Bách',
-        phoneNumber: '0975556677',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'XuanBach@Pro2026',
-      },
-      {
-        email: 'tuan.ta@gmail.com',
-        fullName: 'Tạ Minh Tuấn',
-        phoneNumber: '0976667788',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'MinhTuan#Cinema01',
-      },
-      {
-        email: 'ngan.kim@gmail.com',
-        fullName: 'Kim Thúy Ngân',
-        phoneNumber: '0977778899',
-        role: UserRole.CUSTOMER,
-        rawPassword: 'ThuyNgan@Pass2026',
-      },
-    ];
-
-    for (const u of rawUsers) {
-
-      const exists = await userRepo.findOne({ where: { email: u.email } });
-      
-      if (!exists) {
-        const hashedPassword = await bcrypt.hash(u.rawPassword, 10);
-        await userRepo.save(
-          userRepo.create({
-            email: u.email,
-            fullName: u.fullName,
-            phoneNumber: u.phoneNumber,
-            role: u.role,
-            password: hashedPassword,
-          }),
-        );
-        this.logger.log(`-> Đã thêm mới user: ${u.email}`);
-      }
+    const existingAdmin = await userRepo.findOne({
+      where: { email: 'admin@cinema.com' },
+    });
+    if (!existingAdmin) {
+      const passwordHash = await bcrypt.hash('Admin@123', 10);
+      await userRepo.save([
+        userRepo.create({
+          email: 'admin@cinema.com',
+          password: passwordHash,
+          fullName: 'Quản Trị Viên (Admin)',
+          phoneNumber: '0901234567',
+          role: UserRole.ADMIN,
+        }),
+        userRepo.create({
+          email: 'customer@gmail.com',
+          password: passwordHash,
+          fullName: 'Khách Hàng Mẫu',
+          phoneNumber: '0988888888',
+          role: UserRole.CUSTOMER,
+        }),
+      ]);
+      this.logger.log(
+        '-> Đã tạo tài khoản mẫu: admin@cinema.com (Admin@123), customer@gmail.com (Admin@123)',
+      );
     }
 
     // 2. Tạo Rạp & Phòng chiếu mẫu
-    const cinemaConfigs = [
-      // 2.1. CGV Landmark 81 (TP.HCM)
-      {
-        name: 'CGV Landmark 81',
-        address: '772 Điện Biên Phủ, Phường 22, Bình Thạnh',
-        city: 'TP. Hồ Chí Minh',
-        rooms: [
-          { name: 'Phòng 01 - IMAX Laser', rows: ['A', 'B', 'C', 'D'], cols: 10 }, // 40 ghế
-          { name: 'Phòng 02 - Gold Class', rows: ['A', 'B', 'C'], cols: 10 },       // 30 ghế
-        ],
-      },
-      // 2.2. Galaxy Sala (TP.HCM)
-      {
-        name: 'Galaxy Sala',
-        address: 'Tầng 3 Thiso Mall Sala, 10 Mai Chí Thọ, Thủ Đức',
-        city: 'TP. Hồ Chí Minh',
-        rooms: [
-          { name: 'Phòng 01 - IMAX', rows: ['A', 'B', 'C', 'D'], cols: 10 },         // 40 ghế
-          { name: 'Phòng 02 - Atmos', rows: ['A', 'B', 'C', 'D'], cols: 10 },        // 40 ghế
-        ],
-      },
-      // 2.3. Lotte Cinema Gò Vấp (TP.HCM)
-      {
-        name: 'Lotte Cinema Gò Vấp',
-        address: 'Tầng 4 Lotte Mart, 242 Nguyễn Văn Lượng, Gò Vấp',
-        city: 'TP. Hồ Chí Minh',
-        rooms: [
-          { name: 'Phòng 01 - Super Plex', rows: ['A', 'B', 'C', 'D'], cols: 10 },   // 40 ghế
-          { name: 'Phòng 02 - Standard 2D', rows: ['A', 'B', 'C'], cols: 10 },       // 30 ghế
-        ],
-      },
-      // 2.4. BHD Star Cầu Giấy (Hà Nội)
-      {
-        name: 'BHD Star Cầu Giấy',
-        address: 'Tầng 8 Discovery Complex, 302 Cầu Giấy',
-        city: 'Hà Nội',
-        rooms: [
-          { name: 'Phòng 01 - First Class', rows: ['A', 'B', 'C'], cols: 10 },       // 30 ghế
-          { name: 'Phòng 02 - Digital 2D', rows: ['A', 'B', 'C'], cols: 10 },        // 30 ghế
-        ],
-      },
-    ];
+    let cinema = await cinemaRepo.findOne({
+      where: { name: 'CGV Landmark 81' },
+    });
+    let room1: CinemaRoom;
 
-    let newCinemasCount = 0;
-    let newRoomsCount = 0;
+    if (!cinema) {
+      cinema = await cinemaRepo.save(
+        cinemaRepo.create({
+          name: 'CGV Landmark 81',
+          address: '772 Điện Biên Phủ, Phường 22, Bình Thạnh',
+          city: 'TP. Hồ Chí Minh',
+        }),
+      );
 
-    for (const config of cinemaConfigs) {
-      // Tầng 1: Tìm hoặc tạo Cụm rạp
-      let cinema = await cinemaRepo.findOne({
-        where: { name: config.name },
-      });
+      room1 = await roomRepo.save(
+        roomRepo.create({
+          name: 'Phòng 01 - IMAX Laser',
+          cinemaId: cinema.id,
+          totalSeats: 40,
+        }),
+      );
 
-      if (!cinema) {
-        cinema = await cinemaRepo.save(
-          cinemaRepo.create({
-            name: config.name,
-            address: config.address,
-            city: config.city,
-          }),
-        );
-        newCinemasCount++;
-        this.logger.log(`-> Tạo mới rạp: ${config.name}`);
-      }
+      await roomRepo.save(
+        roomRepo.create({
+          name: 'Phòng 02 - Gold Class',
+          cinemaId: cinema.id,
+          totalSeats: 0,
+        }),
+      );
 
-      // Tầng 2: Kiểm tra từng Phòng chiếu bên trong Rạp đó
-      for (const roomData of config.rooms) {
-        let room = await roomRepo.findOne({
-          where: {
-            name: roomData.name,
-            cinemaId: cinema.id,
-          },
-        });
-
-        // Nếu phòng này chưa tồn tại trong rạp -> Tạo phòng và sinh ghế tương ứng
-        if (!room) {
-          const totalSeatsCount = roomData.rows.length * roomData.cols;
-          room = await roomRepo.save(
-            roomRepo.create({
-              name: roomData.name,
-              cinemaId: cinema.id,
-              totalSeats: totalSeatsCount,
-            }),
-          );
-          newRoomsCount++;
-
-          // Tầng 3: Tự động sinh sơ đồ ghế cho phòng mới
-          const seatsToInsert: Partial<Seat>[] = [];
-          for (const row of roomData.rows) {
-            // Hàng C và D là ghế VIP (hệ số giá 1.25), hàng A và B là ghế thường (1.0)
-            const isVip = row === 'C' || row === 'D';
-            for (let col = 1; col <= roomData.cols; col++) {
-              seatsToInsert.push({
-                roomId: room.id,
-                row,
-                column: col,
-                seatNumber: `${row}${col}`,
-                type: isVip ? SeatType.VIP : SeatType.REGULAR,
-                priceMultiplier: isVip ? 1.25 : 1.0,
-              });
-            }
-          }
-          await seatRepo.save(seatsToInsert);
-          this.logger.log(`   + Tạo '${room.name}' (${config.name}) kèm ${seatsToInsert.length} ghế`);
+      // Tạo ghế cho phòng 1 (4 hàng A-D, 10 ghế mỗi hàng)
+      const seatsToInsert: Partial<Seat>[] = [];
+      const rows = ['A', 'B', 'C', 'D'];
+      for (const row of rows) {
+        const isVip = row === 'C' || row === 'D';
+        for (let col = 1; col <= 10; col++) {
+          seatsToInsert.push({
+            roomId: room1.id,
+            row,
+            column: col,
+            seatNumber: `${row}${col}`,
+            seatTypeId: types.find(
+              (type) =>
+                type.name === String(isVip ? SeatType.VIP : SeatType.REGULAR),
+            )!.id,
+          });
         }
       }
-    }
-
-    if (newCinemasCount > 0 || newRoomsCount > 0) {
+      await seatRepo.save(seatsToInsert);
       this.logger.log(
-        `-> Hoàn tất nạp dữ liệu: +${newCinemasCount} rạp mới, +${newRoomsCount} phòng chiếu mới.`,
+        `-> Đã tạo rạp '${cinema.name}', 2 phòng chiếu và 40 ghế mẫu`,
       );
     } else {
-      this.logger.log('-> Toàn bộ rạp và phòng chiếu đã tồn tại đầy đủ, bỏ qua.');
+      room1 = (await roomRepo.findOne({ where: { cinemaId: cinema.id } }))!;
     }
 
     // 3. Tạo Phim mẫu
-    const sampleMovies = [
-      {
-        title: 'Dune: Part Two',
-        description:
-          'Hành trình huyền thoại của Paul Atreides khi anh hợp nhất với Chani và người Fremen để trả thù những kẻ đã hủy diệt gia tộc mình.',
-        durationMinutes: 166,
-        releaseDate: new Date('2024-03-01'),
-        genre: 'Khoa học viễn tưởng, Phiêu lưu',
-        director: 'Denis Villeneuve',
-        cast: 'Timothée Chalamet, Zendaya, Rebecca Ferguson',
-        posterUrl: 'https://image.tmdb.org/t/p/original/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=Way9Dexny3w',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 8.5,
-      },
-      {
-        title: 'Oppenheimer',
-        description:
-          'Câu chuyện kịch tính về cuộc đời và sự dằn vặt đạo đức của J. Robert Oppenheimer trong dự án Manhattan chế tạo bom nguyên tử đầu tiên.',
-        durationMinutes: 180,
-        releaseDate: new Date('2023-07-21'),
-        genre: 'Tiểu sử, Lịch sử, Chính kịch',
-        director: 'Christopher Nolan',
-        cast: 'Cillian Murphy, Emily Blunt, Matt Damon, Robert Downey Jr.',
-        posterUrl: 'https://image.tmdb.org/t/p/original/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=uYPbbksJxIg',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 8.9,
-      },
-      {
-        title: 'Interstellar',
-        description:
-          'Một nhóm phi hành gia du hành qua một hố sâu bí ẩn ngoài không gian nhằm tìm kiếm hành tinh mới có thể duy trì sự sống cho nhân loại.',
-        durationMinutes: 169,
-        releaseDate: new Date('2014-11-07'),
-        genre: 'Khoa học viễn tưởng, Phiêu lưu',
-        director: 'Christopher Nolan',
-        cast: 'Matthew McConaughey, Anne Hathaway, Jessica Chastain',
-        posterUrl: 'https://image.tmdb.org/t/p/original/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=zSWdZVtXT7E',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 8.7,
-      },
-      {
-        title: 'Deadpool & Wolverine',
-        description:
-          'Wade Wilson tái xuất giang hồ và buộc phải kéo Wolverine ra khỏi cơn khủng hoảng nhằm bảo vệ dòng thời gian quê hương khỏi diệt vong.',
-        durationMinutes: 128,
-        releaseDate: new Date('2024-07-26'),
-        genre: 'Hành động, Hài hước, Siêu anh hùng',
-        director: 'Shawn Levy',
-        cast: 'Ryan Reynolds, Hugh Jackman, Emma Corrin',
-        posterUrl: 'https://image.tmdb.org/t/p/original/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=73_1biulkYk',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 7.8,
-      },
-      {
-        title: 'Godzilla x Kong: The New Empire',
-        description:
-          'Hai thế lực quái thú hùng mạnh nhất lịch sử buộc phải bắt tay để chống lại một mối hiểm họa tiềm ẩn từ sâu trong Lòng Đất Rỗng.',
-        durationMinutes: 115,
-        releaseDate: new Date('2024-03-29'),
-        genre: 'Hành động, Quái thú, Giả tưởng',
-        director: 'Adam Wingard',
-        cast: 'Rebecca Hall, Brian Tyree Henry, Dan Stevens',
-        posterUrl: 'https://image.tmdb.org/t/p/original/tMefBSflR6PGQLv7WvFPpKLZkyk.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=1qjV_cc7pVM',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 7.2,
-      },
-      {
-        title: 'Inside Out 2',
-        description:
-          'Khi cô bé Riley bước vào tuổi dậy thì, trụ sở cảm xúc trong tâm trí bất ngờ đón nhận những cảm xúc mới nổi loạn, dẫn đầu là Anxiety.',
-        durationMinutes: 96,
-        releaseDate: new Date('2024-06-14'),
-        genre: 'Hoạt hình, Gia đình, Hài kịch',
-        director: 'Kelsey Mann',
-        cast: 'Amy Poehler, Maya Hawke, Phyllis Smith',
-        posterUrl: 'https://image.tmdb.org/t/p/original/vpnVM9B6NMmQpWeZvzLvDESb2QY.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=mg50EkStx-s',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 7.9,
-      },
-      {
-        title: 'Spider-Man: Across the Spider-Verse',
-        description:
-          'Miles Morales bước vào chuyến phiêu lưu xuyên qua đa vũ trụ nhện và phải đưa ra lựa chọn định mệnh giữa người mình yêu và trách nhiệm.',
-        durationMinutes: 140,
-        releaseDate: new Date('2023-06-02'),
-        genre: 'Hoạt hình, Hành động, Viễn tưởng',
-        director: 'Joaquim Dos Santos, Kemp Powers',
-        cast: 'Shameik Moore, Hailee Steinfeld, Oscar Isaac',
-        posterUrl: 'https://image.tmdb.org/t/p/original/8Vt6mWEReuy4Of61Lnj5Xj704m8.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=cqGjhVJWtEg',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 8.7,
-      },
-      {
-        title: 'Kung Fu Panda 4',
-        description:
-          'Po chuẩn bị tiếp nhận vai trò Thủ lĩnh tinh thần của Thung lũng Hòa Bình nhưng phải đối đầu với phù thủy Tắc Kè Bông biến hình nguy hiểm.',
-        durationMinutes: 94,
-        releaseDate: new Date('2024-03-08'),
-        genre: 'Hoạt hình, Hành động, Hài hước',
-        director: 'Mike Mitchell',
-        cast: 'Jack Black, Awkwafina, Viola Davis',
-        posterUrl: 'https://image.tmdb.org/t/p/original/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=xCVBU07uGf4',
-        status: MovieStatus.NOW_SHOWING,
-        rating: 7.1,
-      },
-      {
-        title: 'Avatar: Fire and Ash',
-        description:
-          'Chương thứ ba tái hiện thế giới Pandora kỳ vĩ, đưa gia đình Jake Sully chạm trán với Tộc Tro tàn (Ash People) tàn bạo và hiếu chiến.',
-        durationMinutes: 190,
-        releaseDate: new Date('2025-12-19'),
-        genre: 'Khoa học viễn tưởng, Phiêu lưu, Hành động',
-        director: 'James Cameron',
-        cast: 'Sam Worthington, Zoe Saldana, Sigourney Weaver',
-        posterUrl: 'https://image.tmdb.org/t/p/original/t6HIqrRAclMCA60NsSmeqe9RmNV.jpg',
-        trailerUrl: 'https://www.youtube.com/watch?v=Eb2TjJr21Nk',
-        status: MovieStatus.COMING_SOON,
-        rating: 0.0,
-      },
-      {
-        title: 'Captain America: Brave New World',
-        description:
-          'Sam Wilson chính thức gánh vác chiếc khiên Captain America trong một cuộc khủng hoảng quốc tế mới liên quan đến tổng thống Thaddeus Ross.',
-        durationMinutes: 125,
-        releaseDate: new Date('2025-02-14'),
-        genre: 'Hành động, Giật gân, Siêu anh hùng',
-        director: 'Julius Onah',
-        cast: 'Anthony Mackie, Harrison Ford, Danny Ramirez',
-        posterUrl: 'https://theposterdb.com/api/assets/595571/view',
-        trailerUrl: 'https://www.youtube.com/watch?v=FEa9pPqGhPY',
-        status: MovieStatus.COMING_SOON,
-        rating: 0.0,
-      },
-    ];
+    const existingMovie = await movieRepo.findOne({
+      where: { title: 'Dune: Part Two' },
+    });
+    let movieDune: Movie;
 
-    let newMoviesCount = 0;
-    for (const movieData of sampleMovies) {
-      const existingMovie = await movieRepo.findOne({
-        where: { title: movieData.title },
-      });
+    if (!existingMovie) {
+      movieDune = await movieRepo.save(
+        movieRepo.create({
+          title: 'Dune: Part Two',
+          description:
+            'Hành trình huyền thoại của Paul Atreides khi anh hợp nhất với Chani và Fremen để trả thù...',
+          durationMinutes: 166,
+          releaseDate: new Date('2026-03-01'),
+          genres: genres.filter((genre) =>
+            ['Khoa học viễn tưởng', 'Phiêu lưu'].includes(genre.name),
+          ),
+          director: 'Denis Villeneuve',
+          cast: 'Timothée Chalamet, Zendaya, Rebecca Ferguson',
+          posterUrl:
+            'https://images.unsplash.com/photo-1534447677768-be436bb09401',
+          trailerUrl: 'https://www.youtube.com/watch?v=Way9Dexny3w',
+          status: MovieStatus.NOW_SHOWING,
+          rating: 8.8,
+        }),
+      );
 
-      if (!existingMovie) {
-        await movieRepo.save(movieRepo.create(movieData));
-        newMoviesCount++;
-      }
-    }
+      await movieRepo.save(
+        movieRepo.create({
+          title: 'Oppenheimer',
+          description:
+            'Câu chuyện về nhà vật lý lý thuyết J. Robert Oppenheimer, cha đẻ của bom nguyên tử...',
+          durationMinutes: 180,
+          releaseDate: new Date('2026-02-15'),
+          genres: genres.filter((genre) =>
+            ['Tiểu sử', 'Lịch sử', 'Chính kịch'].includes(genre.name),
+          ),
+          director: 'Christopher Nolan',
+          cast: 'Cillian Murphy, Emily Blunt, Matt Damon',
+          posterUrl:
+            'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba',
+          trailerUrl: 'https://www.youtube.com/watch?v=uYPbbksJxIg',
+          status: MovieStatus.NOW_SHOWING,
+          rating: 8.9,
+        }),
+      );
 
-    if (newMoviesCount > 0) {
-      this.logger.log(`-> Đã nạp thêm ${newMoviesCount} phim mới vào cơ sở dữ liệu.`);
-    } else {
-      this.logger.log('-> Toàn bộ phim mẫu đã tồn tại trong database, bỏ qua.');
-    }
+      this.logger.log('-> Đã tạo 2 phim mẫu: Dune: Part Two & Oppenheimer');
 
       // 4. Tạo Suất chiếu mẫu
-      // 4.1. Lấy danh sách các phim đang chiếu và các phòng chiếu hiện có
-    const nowShowingMovies = await movieRepo.find({
-      where: { status: MovieStatus.NOW_SHOWING },
-    });
+      if (room1) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
 
-    const allRooms = await roomRepo.find();
+        const endTomorrow = new Date(tomorrow);
+        endTomorrow.setHours(21, 46, 0, 0);
 
-    if (nowShowingMovies.length > 0 && allRooms.length > 0) {
-      // Hàm tiện ích: Tạo mốc thời gian chuẩn (ngày + giờ:phút)
-      const buildScheduleDate = (daysFromNow: number, hours: number, minutes: number) => {
-        const date = new Date();
-        date.setDate(date.getDate() + daysFromNow);
-        date.setHours(hours, minutes, 0, 0);
-        return date;
-      };
-
-      // 4.2. Cấu hình danh sách 8 suất chiếu mẫu
-      // Phân bổ các phim hot (Dune, Oppenheimer, Deadpool, Inside Out 2) vào các phòng khác nhau
-      const showtimeConfigs = [
-        // --- HÔM NAY (daysFromNow = 0) ---
-        {
-          movieTitle: 'Dune: Part Two',
-          roomIndex: 0, // Phòng 01 - IMAX Laser (CGV Landmark 81)
-          daysFromNow: 0,
-          hour: 18,
-          minute: 30,
-          basePrice: 120000,
-        },
-        {
-          movieTitle: 'Inside Out 2',
-          roomIndex: 1, // Phòng 02 - Gold Class (CGV Landmark 81)
-          daysFromNow: 0,
-          hour: 19,
-          minute: 0,
+        await this.showtimesService.create({
+          movieId: movieDune.id,
+          roomId: room1.id,
+          startTime: tomorrow.toISOString(),
+          endTime: endTomorrow.toISOString(),
           basePrice: 100000,
-        },
-        {
-          movieTitle: 'Deadpool & Wolverine',
-          roomIndex: 2, // Phòng 01 - IMAX (Galaxy Sala)
-          daysFromNow: 0,
-          hour: 20,
-          minute: 0,
-          basePrice: 110000,
-        },
-
-        // --- NGÀY MAI (daysFromNow = 1) ---
-        {
-          movieTitle: 'Dune: Part Two',
-          roomIndex: 0,
-          daysFromNow: 1,
-          hour: 14,
-          minute: 0,
-          basePrice: 100000,
-        },
-        {
-          movieTitle: 'Oppenheimer',
-          roomIndex: 0,
-          daysFromNow: 1,
-          hour: 18,
-          minute: 0,
-          basePrice: 120000,
-        },
-        {
-          movieTitle: 'Spider-Man: Across the Spider-Verse',
-          roomIndex: 2,
-          daysFromNow: 1,
-          hour: 16,
-          minute: 30,
-          basePrice: 95000,
-        },
-        {
-          movieTitle: 'Godzilla x Kong: The New Empire',
-          roomIndex: 4, // Phòng 01 - Super Plex (Lotte Gò Vấp)
-          daysFromNow: 1,
-          hour: 19,
-          minute: 30,
-          basePrice: 105000,
-        },
-        {
-          movieTitle: 'Kung Fu Panda 4',
-          roomIndex: 6, // Phòng 01 - First Class (BHD Cầu Giấy)
-          daysFromNow: 1,
-          hour: 17,
-          minute: 0,
-          basePrice: 90000,
-        },
-      ];
-
-      let newShowtimesCount = 0;
-
-      for (const config of showtimeConfigs) {
-        const targetMovie = nowShowingMovies.find((m) => m.title === config.movieTitle);
-        const targetRoom = allRooms[config.roomIndex] || allRooms[0];
-
-        if (targetMovie && targetRoom) {
-          const startTime = buildScheduleDate(config.daysFromNow, config.hour, config.minute);
-
-          // Tự động tính endTime = startTime + durationMinutes (cộng thêm 10 phút nghỉ chuyển suất)
-          const endTime = new Date(startTime.getTime() + (targetMovie.durationMinutes + 10) * 60 * 1000);
-
-          // Kiểm tra xem phòng đó vào đúng thời điểm đó đã có suất chiếu chưa
-          const existingShowtime = await showtimeRepo.findOne({
-            where: {
-              roomId: targetRoom.id,
-              startTime: startTime,
-            },
-          });
-
-          if (!existingShowtime) {
-            await showtimeRepo.save(
-              showtimeRepo.create({
-                movieId: targetMovie.id,
-                roomId: targetRoom.id,
-                startTime,
-                endTime,
-                basePrice: config.basePrice,
-              }),
-            );
-            newShowtimesCount++;
-          }
-        }
-      }
-
-      if (newShowtimesCount > 0) {
-        this.logger.log(`-> Đã nạp thành công ${newShowtimesCount} suất chiếu mẫu mới.`);
-      } else {
-        this.logger.log('-> Toàn bộ suất chiếu mẫu đã tồn tại, bỏ qua.');
-      }
-    }
-
-    // 5. TẠO BOOKINGS & TICKETS MẪU
-    const bookingRepo = this.dataSource.getRepository(Booking);
-    const ticketRepo = this.dataSource.getRepository(Ticket);
-
-    const customerUsers = await userRepo.find({
-      where: { role: UserRole.CUSTOMER },
-      take: 10,
-    });
-    const allShowtimes = await showtimeRepo.find();
-
-    if (customerUsers.length >= 4 && allShowtimes.length >= 3) {
-      // ----------------------------------------------------
-      // ĐƠN 1: 2 vé thường (A1, A2) - CONFIRMED & PAID qua MOMO
-      // ----------------------------------------------------
-      const showtime1 = allShowtimes[0];
-      const seatsRoom1 = await seatRepo.find({
-        where: { roomId: showtime1.roomId },
-        order: { seatNumber: 'ASC' },
-      });
-
-      const code1 = 'BK-DUNE-2026-001';
-      const exists1 = await bookingRepo.findOne({ where: { bookingCode: code1 } });
-
-      if (!exists1 && seatsRoom1.length >= 2) {
-        const s1 = seatsRoom1[0];
-        const s2 = seatsRoom1[1];
-        const price1 = Number(showtime1.basePrice) * Number(s1.priceMultiplier || 1.0);
-        const price2 = Number(showtime1.basePrice) * Number(s2.priceMultiplier || 1.0);
-
-        const booking1 = await bookingRepo.save(
-          bookingRepo.create({
-            bookingCode: code1,
-            userId: customerUsers[0].id,
-            showtimeId: showtime1.id,
-            totalAmount: price1 + price2,
-            status: BookingStatus.CONFIRMED,
-            paymentStatus: PaymentStatus.PAID,
-            paymentMethod: 'MOMO',
-            paymentTransactionId: 'TXN-MOMO-88291039',
-          }),
-        );
-
-        await ticketRepo.save([
-          ticketRepo.create({
-            ticketCode: `TK-${booking1.id}-${s1.seatNumber}`,
-            bookingId: booking1.id,
-            seatId: s1.id,
-            price: price1,
-            status: 'VALID',
-          }),
-          ticketRepo.create({
-            ticketCode: `TK-${booking1.id}-${s2.seatNumber}`,
-            bookingId: booking1.id,
-            seatId: s2.id,
-            price: price2,
-            status: 'VALID',
-          }),
-        ]);
-        this.logger.log(`-> Đã tạo đơn booking '${code1}' kèm 2 vé (${s1.seatNumber}, ${s2.seatNumber})`);
-      }
-
-      // ----------------------------------------------------
-      // ĐƠN 2: 1 vé VIP (C5) - PENDING & PENDING qua VNPAY
-      // ----------------------------------------------------
-      const showtime2 = allShowtimes[1];
-      const seatsRoom2 = await seatRepo.find({
-        where: { roomId: showtime2.roomId },
-        order: { seatNumber: 'ASC' },
-      });
-
-      const code2 = 'BK-IO2-2026-002';
-      const exists2 = await bookingRepo.findOne({ where: { bookingCode: code2 } });
-      const vipSeat = seatsRoom2.find((s) => s.type === SeatType.VIP) || seatsRoom2[0];
-
-      if (!exists2 && vipSeat) {
-        const priceVip = Number(showtime2.basePrice) * Number(vipSeat.priceMultiplier || 1.25);
-
-        const booking2 = await bookingRepo.save(
-          bookingRepo.create({
-            bookingCode: code2,
-            userId: customerUsers[1].id,
-            showtimeId: showtime2.id,
-            totalAmount: priceVip,
-            status: BookingStatus.PENDING,
-            paymentStatus: PaymentStatus.PENDING,
-            paymentMethod: 'VNPAY',
-            paymentTransactionId: undefined,
-          }),
-        );
-
-        await ticketRepo.save([
-          ticketRepo.create({
-            ticketCode: `TK-${booking2.id}-${vipSeat.seatNumber}`,
-            bookingId: booking2.id,
-            seatId: vipSeat.id,
-            price: priceVip,
-            status: 'PENDING',
-          }),
-        ]);
-        this.logger.log(`-> Đã tạo đơn booking '${code2}' kèm 1 vé VIP (${vipSeat.seatNumber})`);
-      }
-
-      // ----------------------------------------------------
-      // ĐƠN 3: 3 vé nhóm (B1, B2, B3) - CONFIRMED & PAID qua ZALOPAY
-      // ----------------------------------------------------
-      const code3 = 'BK-GROUP-2026-003';
-      const exists3 = await bookingRepo.findOne({ where: { bookingCode: code3 } });
-
-      if (!exists3 && seatsRoom1.length >= 5) {
-        const sB1 = seatsRoom1[2];
-        const sB2 = seatsRoom1[3];
-        const sB3 = seatsRoom1[4];
-        const p1 = Number(showtime1.basePrice) * Number(sB1.priceMultiplier || 1.0);
-        const p2 = Number(showtime1.basePrice) * Number(sB2.priceMultiplier || 1.0);
-        const p3 = Number(showtime1.basePrice) * Number(sB3.priceMultiplier || 1.0);
-
-        const booking3 = await bookingRepo.save(
-          bookingRepo.create({
-            bookingCode: code3,
-            userId: customerUsers[2].id,
-            showtimeId: showtime1.id,
-            totalAmount: p1 + p2 + p3,
-            status: BookingStatus.CONFIRMED,
-            paymentStatus: PaymentStatus.PAID,
-            paymentMethod: 'ZALOPAY',
-            paymentTransactionId: 'ZP-TRANS-9912048',
-          }),
-        );
-
-        await ticketRepo.save([
-          ticketRepo.create({
-            ticketCode: `TK-${booking3.id}-${sB1.seatNumber}`,
-            bookingId: booking3.id,
-            seatId: sB1.id,
-            price: p1,
-            status: 'VALID',
-          }),
-          ticketRepo.create({
-            ticketCode: `TK-${booking3.id}-${sB2.seatNumber}`,
-            bookingId: booking3.id,
-            seatId: sB2.id,
-            price: p2,
-            status: 'VALID',
-          }),
-          ticketRepo.create({
-            ticketCode: `TK-${booking3.id}-${sB3.seatNumber}`,
-            bookingId: booking3.id,
-            seatId: sB3.id,
-            price: p3,
-            status: 'VALID',
-          }),
-        ]);
-        this.logger.log(`-> Đã tạo đơn booking '${code3}' kèm 3 vé nhóm (${sB1.seatNumber}, ${sB2.seatNumber}, ${sB3.seatNumber})`);
-      }
-
-      // ----------------------------------------------------
-      // ĐƠN 4: 1 vé thất bại/hết hạn - CANCELLED & FAILED
-      // ----------------------------------------------------
-      const showtime3 = allShowtimes[2] || allShowtimes[0];
-      const seatsRoom3 = await seatRepo.find({
-        where: { roomId: showtime3.roomId },
-        order: { seatNumber: 'DESC' },
-      });
-
-      const code4 = 'BK-FAIL-2026-004';
-      const exists4 = await bookingRepo.findOne({ where: { bookingCode: code4 } });
-
-      if (!exists4 && seatsRoom3.length > 0) {
-        const seatCancel = seatsRoom3[0];
-        const priceCancel = Number(showtime3.basePrice) * Number(seatCancel.priceMultiplier || 1.0);
-
-        const booking4 = await bookingRepo.save(
-          bookingRepo.create({
-            bookingCode: code4,
-            userId: customerUsers[3].id,
-            showtimeId: showtime3.id,
-            totalAmount: priceCancel,
-            status: BookingStatus.CANCELLED,
-            paymentStatus: PaymentStatus.FAILED,
-            paymentMethod: 'VNPAY',
-            paymentTransactionId: undefined,
-          }),
-        );
-
-        await ticketRepo.save([
-          ticketRepo.create({
-            ticketCode: `TK-${booking4.id}-${seatCancel.seatNumber}`,
-            bookingId: booking4.id,
-            seatId: seatCancel.id,
-            price: priceCancel,
-            status: 'CANCELLED',
-          }),
-        ]);
-        this.logger.log(`-> Đã tạo đơn booking '${code4}' trạng thái CANCELLED (${seatCancel.seatNumber})`);
+        });
+        this.logger.log('-> Đã tạo suất chiếu mẫu cho ngày mai');
       }
     }
 
