@@ -21,6 +21,10 @@ import { UserRole } from '../../common/enums';
 export class CinemasController {
   constructor(private readonly cinemasService: CinemasService) {}
 
+  // ==========================================
+  // 1. PUBLIC ENDPOINTS
+  // ==========================================
+
   @Public()
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách tất cả các cụm rạp' })
@@ -42,6 +46,10 @@ export class CinemasController {
     return this.cinemasService.findRoomsByCinema(cinemaId);
   }
 
+  // ==========================================
+  // 2. ADMIN ENDPOINTS - QUẢN LÝ RẠP
+  // ==========================================
+
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
@@ -49,33 +57,6 @@ export class CinemasController {
   @ApiOperation({ summary: 'Thêm rạp chiếu phim mới (Chỉ dành cho ADMIN)' })
   createCinema(@Body() dto: CreateCinemaDto) {
     return this.cinemasService.createCinema(dto);
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @Delete(':id')
-  @ApiOperation({ summary: 'Xóa rạp chiếu phim (Chỉ dành cho ADMIN)' })
-  deleteCinema(@Param('id', ParseIntPipe) id: number) {
-    return this.cinemasService.deleteCinema(id);
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @Post('rooms')
-  @ApiOperation({ summary: 'Thêm phòng chiếu cho rạp (Chỉ dành cho ADMIN)' })
-  createRoom(@Body() dto: CreateRoomDto) {
-    return this.cinemasService.createRoom(dto);
-  }
-
-  @ApiBearerAuth('JWT-auth')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @Delete('rooms/:id')
-  @ApiOperation({ summary: 'Xóa phòng chiếu (Chỉ dành cho ADMIN)' })
-  deleteRoom(@Param('id', ParseIntPipe) id: number) {
-    return this.cinemasService.deleteRoom(id);
   }
 
   @ApiBearerAuth('JWT-auth')
@@ -90,9 +71,40 @@ export class CinemasController {
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
+  @Delete(':id')
+  @ApiOperation({ summary: 'Xóa rạp chiếu phim (Chỉ dành cho ADMIN)' })
+  deleteCinema(@Param('id', ParseIntPipe) id: number) {
+    return this.cinemasService.deleteCinema(id);
+  }
+
+  // ==========================================
+  // 3. ADMIN ENDPOINTS - QUẢN LÝ PHÒNG CHIẾU
+  // ==========================================
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('rooms')
+  @ApiOperation({ summary: 'Thêm phòng chiếu cho rạp (Chỉ dành cho ADMIN)' })
+  createRoom(@Body() dto: CreateRoomDto) {
+    return this.cinemasService.createRoom(dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Put('rooms/:id')
   @ApiOperation({ summary: 'Cập nhật thông tin phòng chiếu (Chỉ ADMIN)' })
   updateRoom(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoomDto) {
     return this.cinemasService.updateRoom(id, dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Delete('rooms/:id')
+  @ApiOperation({ summary: 'Xóa phòng chiếu (Chỉ dành cho ADMIN)' })
+  deleteRoom(@Param('id', ParseIntPipe) id: number) {
+    return this.cinemasService.deleteRoom(id);
   }
 }

@@ -1,5 +1,5 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { IsNotEmpty, IsInt, Min } from 'class-validator';
+import { IsNotEmpty, IsInt, Min, IsOptional, IsString, IsEnum } from 'class-validator';
 
 export class CreateCinemaDto {
   @ApiProperty({
@@ -19,6 +19,21 @@ export class CreateCinemaDto {
   @ApiProperty({ example: 'TP. Hồ Chí Minh', description: 'Thành phố' })
   @IsNotEmpty({ message: 'Thành phố không được để trống' })
   city!: string;
+
+  @ApiProperty({ example: '02838229999', description: 'Số điện thoại rạp', required: false })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiProperty({
+    enum: ['ACTIVE', 'INACTIVE'],
+    default: 'ACTIVE',
+    description: 'Trạng thái hoạt động của rạp',
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(['ACTIVE', 'INACTIVE'])
+  status?: string;
 }
 
 export class CreateRoomDto {
@@ -34,6 +49,16 @@ export class CreateRoomDto {
   @IsInt()
   @Min(1)
   totalSeats!: number;
+
+  @ApiProperty({
+    enum: ['ACTIVE', 'INACTIVE'],
+    default: 'ACTIVE',
+    description: 'Trạng thái phòng chiếu',
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(['ACTIVE', 'INACTIVE'])
+  status?: string;
 }
 
 export class UpdateCinemaDto extends PartialType(CreateCinemaDto) {}
