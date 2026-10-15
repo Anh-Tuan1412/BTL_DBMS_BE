@@ -533,16 +533,26 @@ ON DUPLICATE KEY UPDATE genre_name = VALUES(genre_name);
 
 -- 15.5. Users
 INSERT INTO users (user_id, fullname, email, phone, password_hash, role, status) VALUES
-(1, 'Quách Văn Hà', 'ha.quach@cinema.vn', '0901234567', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'ADMIN', 'ACTIVE'),
-(2, 'Nguyễn Hoàng Long', 'long.nguyen@cinema.vn', '0908889999', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'ADMIN', 'ACTIVE'),
-(3, 'Trần Bảo Nam', 'nam.tran@cinema.vn', '0902223344', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'ADMIN', 'ACTIVE'),
-(4, 'Lê Phương Thảo', 'thao.le@cinema.vn', '0903334455', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'ADMIN', 'ACTIVE'),
-(5, 'Trần Thị Mai', 'mai.tran@gmail.com', '0981112233', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'CUSTOMER', 'ACTIVE'),
-(6, 'Phạm Minh Đức', 'duc.pham@gmail.com', '0982223344', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'CUSTOMER', 'ACTIVE'),
-(7, 'Vũ Thảo Linh', 'linh.vu@gmail.com', '0983334455', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'CUSTOMER', 'ACTIVE'),
-(8, 'Đặng Quốc Huy', 'huy.dang@gmail.com', '0984445566', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'CUSTOMER', 'ACTIVE'),
-(9, 'Bùi Ngọc Ánh', 'anh.bui@gmail.com', '0985556677', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'CUSTOMER', 'ACTIVE'),
-(10, 'Đỗ Thành Long', 'long.do@gmail.com', '0986667788', '$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'CUSTOMER', 'ACTIVE')
+-- HaQuach@26
+(1, 'Quách Văn Hà', 'ha.quach@cinema.vn', '0901234567', '$2b$10$ZpdtqkpANRgcN9kHO0ESWuPNeuS4NwOtDEox1cupmAIj48urHMjYa', 'ADMIN', 'ACTIVE'),
+-- lonGi123
+(2, 'Nguyễn Hoàng Long', 'long.nguyen@cinema.vn', '0908889999', '$2b$10$4jJ56avcszDov9VQ9gSfqOPt.0bNKY1uAVhO3Tlz5YespyN0LgJQy', 'ADMIN', 'ACTIVE'),
+-- 123456
+(3, 'Trần Bảo Nam', 'nam.tran@cinema.vn', '0902223344', '$2b$10$uhfz.aw7.eMuJ.Dk4bA5beOJ3RjTGriZ2UDGqBPfz2iWtz.XC9mv.', 'ADMIN', 'ACTIVE'),
+-- pThao09
+(4, 'Lê Phương Thảo', 'thao.le@cinema.vn', '0903334455', '$2b$10$ysLGfmLiN1qgKfYk9twADe8ByhD0VPU0y7TynSQnqIGys/N0kP5t2', 'ADMIN', 'ACTIVE'),
+-- maimai@#
+(5, 'Trần Thị Mai', 'mai.tran@gmail.com', '0981112233', '$2b$10$f86zwD2P9UuljXQrrQHs5euXUzE1aWJs8pL6FEqWivNC1Pmwk0VqK', 'CUSTOMER', 'ACTIVE'),
+-- DUC112233$
+(6, 'Phạm Minh Đức', 'duc.pham@gmail.com', '0982223344', '$2b$10$bFkIbP3ffdqOxAkDiueKiebSSBmwOW0rFWhOw5I6zhJqLhINU/g0e', 'CUSTOMER', 'ACTIVE'),
+-- Linhvu@
+(7, 'Vũ Thảo Linh', 'linh.vu@gmail.com', '0983334455', '$2b$10$d4FlWuK12dUXPoNYxl.17uNeVh0PVdAU9cRsTsmK2nC0tCzAnVASO', 'CUSTOMER', 'ACTIVE'),
+-- Huydang999
+(8, 'Đặng Quốc Huy', 'huy.dang@gmail.com', '0984445566', '$2b$10$Xh1hNUKD5r1SEsqBk/G4OucZ.1w1qNGjS.RaloeNKMkqcldmJbNKe', 'CUSTOMER', 'ACTIVE'),
+-- anhNGOC67
+(9, 'Bùi Ngọc Ánh', 'anh.bui@gmail.com', '0985556677', '$2b$10$2.P.HyZJKtfNvxD/7eVEsuaVnxN7JUOymIQUJsvyv8BuxziAJn3gm', 'CUSTOMER', 'ACTIVE'),
+-- Longlong7788
+(10, 'Đỗ Thành Long', 'long.do@gmail.com', '0986667788', '$2b$10$mZWEz.WltIZP.a5unaS/f.Gnl9gW4f3W0SdcSW7zmh7l5pbEzd1US', 'CUSTOMER', 'ACTIVE')
 ON DUPLICATE KEY UPDATE fullname = VALUES(fullname);
 
 -- 15.6. Cinemas & Rooms
