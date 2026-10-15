@@ -6,3 +6,7 @@ export * from './seat.entity';
 export * from './showtime.entity';
 export * from './booking.entity';
 export * from './ticket.entity';
+export * from './genre.entity';
+export * from './seat-type.entity';
+export * from './showtime-seat.entity';
+export * from './payment.entity';
