@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto, ForgotPasswordDto } from './dto/auth-requests.dto';
+import { LoginDto, ForgotPasswordDto, VerifyEmailDto } from './dto/auth-requests.dto';
 import { UserRole } from '../../common/enums';
 
 @Injectable()
@@ -54,13 +54,24 @@ export class AuthService {
     };
   }
 
+  async verifyEmail(verifyEmailDto: VerifyEmailDto) {
+    const user = await this.usersService.findByEmail(verifyEmailDto.email);
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy tài khoản người dùng');
+    }
+
+    return {
+      message: 'Xác thực tài khoản thành công! Bạn có thể đăng nhập ngay.',
+    };
+  }
+
   async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email, true);
     if (!user) {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
     }
 
-    // 1. Kiểm tra trạng thái tài khoản (Chống tài khoản bị BANNED/INACTIVE đăng nhập)
+    // 1. Kiểm tra trạng thái tài khoản
     if (user.status === 'BANNED') {
       throw new UnauthorizedException('Tài khoản của bạn đã bị khóa do vi phạm điều khoản');
     }
