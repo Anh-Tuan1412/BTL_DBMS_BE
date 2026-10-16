@@ -35,6 +35,10 @@ export class AuthService {
       role: registerDto.role || UserRole.CUSTOMER,
     });
 
+    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`==================================================`);
+    console.log(`[MOCK OTP] Mã xác thực cho ${newUser.email} là: ${mockOtp}`);
+    console.log(`==================================================`);
     const token = this.generateToken(newUser.id, newUser.email, newUser.role);
 
     return {
