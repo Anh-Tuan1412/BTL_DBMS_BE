@@ -16,7 +16,9 @@ export class MoviesService {
 
   async findAll() {
     const movies = await this.movieRepository.find({
-      relations: ['genres'],
+      relations: {
+        genres: true, // ✅ Đã sửa thành Object format cho TypeORM v0.3+
+      },
       order: { createdAt: 'DESC' },
     });
     return {
@@ -28,7 +30,9 @@ export class MoviesService {
   async findOne(id: number) {
     const movie = await this.movieRepository.findOne({
       where: { id },
-      relations: ['genres'],
+      relations: {
+        genres: true, // ✅ Đã sửa thành Object format cho TypeORM v0.3+
+      },
     });
     if (!movie) {
       throw new NotFoundException(`Không tìm thấy phim với ID = ${id}`);
