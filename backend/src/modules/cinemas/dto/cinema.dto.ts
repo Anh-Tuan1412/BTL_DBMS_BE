@@ -1,5 +1,15 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { IsNotEmpty, IsInt, Min, IsOptional, IsString, IsEnum } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsInt,
+  Min,
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateCinemaDto {
   @ApiProperty({
@@ -36,6 +46,18 @@ export class CreateCinemaDto {
   status?: string;
 }
 
+export class SeatConfigDto {
+  @ApiProperty({ example: 1, description: 'ID loại ghế (từ bảng seat_types)' })
+  @IsInt()
+  @IsNotEmpty({ message: 'ID loại ghế không được để trống' })
+  seatTypeId!: number;
+
+  @ApiProperty({ example: 40, description: 'Số lượng ghế thuộc loại này' })
+  @IsInt()
+  @Min(1, { message: 'Số lượng ghế phải lớn hơn 0' })
+  totalSeats!: number;
+}
+
 export class CreateRoomDto {
   @ApiProperty({ example: 'Cinema 01 (IMAX)', description: 'Tên phòng chiếu' })
   @IsNotEmpty({ message: 'Tên phòng không được để trống' })
@@ -47,8 +69,19 @@ export class CreateRoomDto {
 
   @ApiProperty({ example: 60, description: 'Tổng số ghế trong phòng' })
   @IsInt()
-  @Min(1)
+  @Min(1, { message: 'Tổng số ghế phải lớn hơn 0' })
   totalSeats!: number;
+
+  @ApiProperty({
+    type: [SeatConfigDto],
+    description: 'Danh sách cấu hình số lượng theo từng loại ghế (Thường, VIP, Sweetbox...)',
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SeatConfigDto)
+  seatConfigurations?: SeatConfigDto[];
 
   @ApiProperty({
     enum: ['ACTIVE', 'INACTIVE'],
