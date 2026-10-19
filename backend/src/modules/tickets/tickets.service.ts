@@ -22,7 +22,7 @@ export class TicketsService {
       relations: {
         tickets: { seat: true },
         payments: true,
-        showtime: { movie: true },
+        showtime: { movie: true, room: { cinema: true } },
       },
       order: { createdAt: 'DESC' },
     });
