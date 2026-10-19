@@ -16,6 +16,7 @@ import {
   MonthlyRevenueDto,
   SeatOccupancyDto,
   ExplainQueryDto,
+  BenchmarkResponseDto,
 } from './dto/statistics.dto';
 
 @ApiTags(
@@ -89,9 +90,33 @@ export class StatisticsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Kế hoạch thực thi EXPLAIN và thời gian đáp ứng của câu truy vấn',
+    description:
+      'Kế hoạch thực thi EXPLAIN và thời gian đáp ứng của câu truy vấn',
   })
   explainQuery(@Body() dto: ExplainQueryDto) {
     return this.statisticsService.explainQuery(dto.query);
+  }
+
+  @Get('benchmark/mysql-vs-redis')
+  @ApiOperation({
+    summary:
+      'Thực nghiệm đo lường so sánh hiệu năng trực tiếp giữa MySQL và Redis (Point Read vs Complex Join)',
+  })
+  @ApiQuery({
+    name: 'iterations',
+    required: false,
+    example: 100,
+    description: 'Số lần lặp thử nghiệm (10 - 1000)',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Bảng số liệu so sánh thời gian thực thi, throughput và nhận xét kỹ thuật giữa MySQL và Redis',
+    type: BenchmarkResponseDto,
+  })
+  benchmark(@Query('iterations') iterations?: string) {
+    return this.statisticsService.benchmarkMysqlVsRedis(
+      iterations ? Number(iterations) : 100,
+    );
   }
 }

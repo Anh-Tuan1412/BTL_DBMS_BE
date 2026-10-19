@@ -75,3 +75,52 @@ export class ExplainQueryDto {
   @IsNotEmpty()
   query: string;
 }
+
+export class BenchmarkResponseDto {
+  @ApiProperty({ example: 'So sánh hiệu năng thực nghiệm giữa MySQL 8.0 (InnoDB) và Redis 7.x (In-Memory)' })
+  benchmarkOverview: string;
+
+  @ApiProperty({ example: 100 })
+  iterations: number;
+
+  @ApiProperty()
+  pointLookupTest: {
+    operation: string;
+    redis: {
+      totalTimeMs: string;
+      avgTimePerOpMs: string;
+      throughputOpsSec: number;
+      complexity: string;
+    };
+    mysql: {
+      totalTimeMs: string;
+      avgTimePerOpMs: string;
+      throughputOpsSec: number;
+      complexity: string;
+    };
+    speedupFactor: string;
+    winner: string;
+    analysis: string;
+  };
+
+  @ApiProperty()
+  complexAnalyticsTest: {
+    operation: string;
+    mysql: {
+      supported: boolean;
+      executionTimeMs: string;
+      method: string;
+      suitability: string;
+    };
+    redis: {
+      supported: boolean;
+      method: string;
+      suitability: string;
+    };
+    winner: string;
+    analysis: string;
+  };
+
+  @ApiProperty()
+  architectureConclusion: string;
+}

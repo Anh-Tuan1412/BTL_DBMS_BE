@@ -2,16 +2,27 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { BadRequestException } from '@nestjs/common';
 import { StatisticsService } from './statistics.service';
+import { RedisService } from '../redis/redis.service';
 
 describe('StatisticsService (UC10: Mai Anh Tuấn)', () => {
   let service: StatisticsService;
   let dataSource: {
     query: jest.Mock;
   };
+  let redisService: {
+    get: jest.Mock;
+    set: jest.Mock;
+    del: jest.Mock;
+  };
 
   beforeEach(async () => {
     dataSource = {
       query: jest.fn(),
+    };
+    redisService = {
+      get: jest.fn(),
+      set: jest.fn(),
+      del: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -20,6 +31,10 @@ describe('StatisticsService (UC10: Mai Anh Tuấn)', () => {
         {
           provide: DataSource,
           useValue: dataSource,
+        },
+        {
+          provide: RedisService,
+          useValue: redisService,
         },
       ],
     }).compile();
@@ -173,6 +188,24 @@ describe('StatisticsService (UC10: Mai Anh Tuấn)', () => {
       await expect(
         service.explainQuery('DELETE FROM bookings WHERE id = 1'),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('benchmarkMysqlVsRedis', () => {
+    it('should measure and compare point reads and complex analytics between Redis and MySQL', async () => {
+      redisService.set.mockResolvedValue(true);
+      redisService.get.mockResolvedValue('{"id":1}');
+      dataSource.query.mockResolvedValue([{ movie_id: 1, title: 'Mai' }]);
+
+      const result = await service.benchmarkMysqlVsRedis(20);
+
+      expect(result.benchmarkOverview).toBeDefined();
+      expect(result.iterations).toBe(20);
+      expect(result.pointLookupTest.winner).toContain('Redis');
+      expect(result.complexAnalyticsTest.winner).toContain('MySQL');
+      expect(redisService.set).toHaveBeenCalled();
+      expect(redisService.get).toHaveBeenCalled();
+      expect(dataSource.query).toHaveBeenCalled();
     });
   });
 });

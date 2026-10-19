@@ -10,6 +10,7 @@ describe('StatisticsController (UC10: Mai Anh Tuấn)', () => {
     getRevenueByMonth: jest.Mock;
     getSeatOccupancyRate: jest.Mock;
     explainQuery: jest.Mock;
+    benchmarkMysqlVsRedis: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -19,6 +20,7 @@ describe('StatisticsController (UC10: Mai Anh Tuấn)', () => {
       getRevenueByMonth: jest.fn(),
       getSeatOccupancyRate: jest.fn(),
       explainQuery: jest.fn(),
+      benchmarkMysqlVsRedis: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -119,6 +121,26 @@ describe('StatisticsController (UC10: Mai Anh Tuấn)', () => {
 
       expect(service.explainQuery).toHaveBeenCalledWith('SELECT 1');
       expect(result).toBe(mockResult);
+    });
+  });
+
+  describe('benchmark', () => {
+    it('should call benchmarkMysqlVsRedis with parsed iterations', async () => {
+      const mockResult = { benchmarkOverview: 'OK' };
+      service.benchmarkMysqlVsRedis.mockResolvedValue(mockResult);
+
+      const result = await controller.benchmark('50');
+
+      expect(service.benchmarkMysqlVsRedis).toHaveBeenCalledWith(50);
+      expect(result).toBe(mockResult);
+    });
+
+    it('should default to 100 iterations if not provided', async () => {
+      service.benchmarkMysqlVsRedis.mockResolvedValue({});
+
+      await controller.benchmark(undefined);
+
+      expect(service.benchmarkMysqlVsRedis).toHaveBeenCalledWith(100);
     });
   });
 });
