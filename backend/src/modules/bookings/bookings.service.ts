@@ -1,10 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { Booking } from '../../database/entities/booking.entity';
 import { Ticket } from '../../database/entities/ticket.entity';
 import { Showtime } from '../../database/entities/showtime.entity';
 import { Seat } from '../../database/entities/seat.entity';
+import { BookingStatus, PaymentStatus } from '../../common/enums';
 import { RedisService } from '../redis/redis.service';
 import {
   HoldSeatDto,
@@ -13,8 +20,12 @@ import {
   MockStripePaymentDto,
 } from './dto/booking.dto';
 
+const HOLD_TTL_SECONDS = 300; // 5 phút
+
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     @InjectRepository(Booking)
     private readonly bookingRepository: Repository<Booking>,
@@ -29,65 +40,366 @@ export class BookingsService {
   ) {}
 
   // =========================================================================
-  // TODO: Định - Hiện thực UC7: Giữ ghế tạm thời với Redis TTL (5 phút)
-  // Áp dụng Concurrency Control & Atomic Lock (SET NX EX)
+  // UC7: Giữ ghế tạm thời bằng Redis TTL (5 phút) & Concurrency Control
   // =========================================================================
 
+  /**
+   * Giữ 1 ghế tạm thời bằng SET NX EX trên Redis
+   */
   async holdSeat(userId: number, dto: HoldSeatDto) {
-    // TODO: Định viết logic:
-    // 1. Kiểm tra xem ghế đã được ai mua chưa trong MySQL
-    // 2. Gọi redisService.holdSeat() để thực hiện khóa nguyên tử trên Redis với TTL 300s
-    return {
-      message: 'TODO: Định viết logic giữ ghế với Redis TTL (5 phút)',
+    const { showtimeId, seatId } = dto;
+
+    // 1. Kiểm tra suất chiếu tồn tại và chưa chiếu
+    const showtime = await this.showtimeRepository.findOne({
+      where: { id: showtimeId },
+    });
+    if (!showtime) {
+      throw new NotFoundException('Suất chiếu không tồn tại');
+    }
+    if (new Date() >= new Date(showtime.startTime)) {
+      throw new BadRequestException('Suất chiếu đã bắt đầu hoặc đã kết thúc');
+    }
+
+    // 2. Kiểm tra ghế có thuộc phòng chiếu của suất chiếu không
+    const seat = await this.seatRepository.findOne({
+      where: { id: seatId, roomId: showtime.roomId },
+    });
+    if (!seat) {
+      throw new BadRequestException('Ghế không tồn tại trong phòng chiếu này');
+    }
+
+    // 3. Kiểm tra ghế đã được bán trong MySQL chưa (Booking CONFIRMED)
+    const existingTicket = await this.ticketRepository
+      .createQueryBuilder('ticket')
+      .innerJoin('ticket.booking', 'booking')
+      .where('booking.showtimeId = :showtimeId', { showtimeId })
+      .andWhere('ticket.seatId = :seatId', { seatId })
+      .andWhere('booking.status = :status', { status: BookingStatus.CONFIRMED })
+      .andWhere('ticket.status = :ticketStatus', { ticketStatus: 'VALID' })
+      .getOne();
+
+    if (existingTicket) {
+      throw new ConflictException('Ghế này đã được đặt mua thành công bởi người khác');
+    }
+
+    // 4. Khóa nguyên tử (Atomic Lock) trên Redis bằng SET NX EX qua RedisService
+    const result = await this.redisService.holdSeat(
+      showtimeId,
+      seatId,
       userId,
-      showtimeId: dto.showtimeId,
-      seatId: dto.seatId,
+      HOLD_TTL_SECONDS,
+    );
+
+    if (!result.success) {
+      throw new ConflictException(result.message);
+    }
+
+    return {
+      success: true,
+      message: result.message,
+      data: {
+        showtimeId,
+        seatId,
+        seatNumber: seat.seatNumber,
+        userId,
+        expiresInSeconds: result.remainingTtl || HOLD_TTL_SECONDS,
+      },
     };
   }
 
+  /**
+   * Giải phóng ghế khi người dùng chủ động bỏ chọn
+   */
   async releaseSeat(userId: number, dto: ReleaseSeatDto) {
-    // TODO: Định viết logic giải phóng khóa ghế trên Redis khi user hủy chọn
+    const { showtimeId, seatId } = dto;
+    const released = await this.redisService.releaseSeat(showtimeId, seatId, userId);
+
+    if (!released) {
+      throw new BadRequestException('Không thể hủy giữ ghế vì bạn không sở hữu lượt giữ này');
+    }
+
     return {
-      message: 'TODO: Định viết logic giải phóng ghế giữ tạm thời',
-      userId,
-      showtimeId: dto.showtimeId,
-      seatId: dto.seatId,
+      success: true,
+      message: 'Đã hủy giữ ghế thành công',
+      data: { showtimeId, seatId },
     };
   }
 
   // =========================================================================
-  // TODO: Định - Hiện thực UC8: Đặt vé và Thanh toán (Stripe Test Mode)
-  // Sử dụng MySQL Transaction (queryRunner) để đảm bảo tính ACID
+  // UC8: Tạo Booking (MySQL Transaction Serializable) & Thanh toán Stripe
   // =========================================================================
 
+  /**
+   * Tạo đơn Booking và tạo vé tạm ở MySQL trong Transaction ACID
+   */
   async createBooking(userId: number, dto: CreateBookingDto) {
-    // TODO: Định viết logic Transaction đặt vé:
-    // const queryRunner = this.dataSource.createQueryRunner();
-    // await queryRunner.connect();
-    // await queryRunner.startTransaction('SERIALIZABLE');
-    // try {
-    //   1. Kiểm tra ghế hợp lệ & chưa ai mua
-    //   2. Tính tổng tiền
-    //   3. Tạo Booking (PENDING)
-    //   4. Tạo Tickets tương ứng từng ghế
-    //   5. Commit Transaction
-    // } catch { Rollback }
+    const { showtimeId, seatIds, paymentMethod = 'STRIPE' } = dto;
+    const uniqueSeatIds = Array.from(new Set(seatIds));
+
+    // 1. Kiểm tra Suất chiếu
+    const showtime = await this.showtimeRepository.findOne({
+      where: { id: showtimeId },
+      relations: {
+        movie: true,
+        room: true,
+      },
+    });
+    if (!showtime) {
+      throw new NotFoundException('Suất chiếu không tồn tại');
+    }
+    if (new Date() >= new Date(showtime.startTime)) {
+      throw new BadRequestException('Suất chiếu đã bắt đầu hoặc đã kết thúc');
+    }
+
+    // 2. Kiểm tra danh sách ghế
+    const seats = await this.seatRepository.find({
+      where: { id: In(uniqueSeatIds), roomId: showtime.roomId },
+    });
+    if (seats.length !== uniqueSeatIds.length) {
+      throw new BadRequestException('Một hoặc nhiều ghế không hợp lệ trong phòng chiếu');
+    }
+
+    // 3. Kiểm tra quyền giữ ghế: Phải đảm bảo chính user này đang giữ TẤT CẢ các ghế này trên Redis
+    const redisClient = this.redisService.getClient();
+    for (const seatId of uniqueSeatIds) {
+      const seatKey = `seat_lock:showtime:${showtimeId}:seat:${seatId}`;
+      const holder = await redisClient.get(seatKey);
+      if (holder !== userId.toString()) {
+        throw new ConflictException(
+          `Ghế ID ${seatId} chưa được bạn giữ hoặc đã hết hạn giữ chỗ (5 phút). Vui lòng chọn lại ghế!`,
+        );
+      }
+    }
+
+    // 4. Khởi chạy Database Transaction
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 4.1 Kiểm tra đối soát trong DB xem có vé nào đã CONFIRMED chưa
+      const soldTickets = await queryRunner.manager
+        .createQueryBuilder(Ticket, 'ticket')
+        .innerJoin('ticket.booking', 'booking')
+        .where('booking.showtimeId = :showtimeId', { showtimeId })
+        .andWhere('ticket.seatId IN (:...seatIds)', { seatIds: uniqueSeatIds })
+        .andWhere('booking.status = :status', { status: BookingStatus.CONFIRMED })
+        .andWhere('ticket.status = :ticketStatus', { ticketStatus: 'VALID' })
+        .getMany();
+
+      if (soldTickets.length > 0) {
+        throw new ConflictException('Một số ghế đã có người đặt mua trước đó');
+      }
+
+      // 4.2 Tính tổng tiền dựa theo basePrice suất chiếu và priceMultiplier từng loại ghế (VIP / Thường)
+      const seatMap = new Map(seats.map((s) => [s.id, s]));
+      let calculatedTotal = 0;
+      const ticketPayloads: { seatId: number; price: number }[] = [];
+
+      for (const seatId of uniqueSeatIds) {
+        const s = seatMap.get(seatId)!;
+        const multiplier = Number(s.priceMultiplier) || 1.0;
+        const ticketPrice = Number(showtime.basePrice) * multiplier;
+        calculatedTotal += ticketPrice;
+        ticketPayloads.push({ seatId, price: ticketPrice });
+      }
+
+      // 4.3 Tạo bản ghi Booking (PENDING)
+      const bookingCode = `BK-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const booking = queryRunner.manager.create(Booking, {
+        bookingCode,
+        userId,
+        showtimeId,
+        totalAmount: calculatedTotal,
+        status: BookingStatus.PENDING,
+        paymentStatus: PaymentStatus.PENDING,
+        paymentMethod,
+      });
+
+      const savedBooking = await queryRunner.manager.save(Booking, booking);
+
+      // 4.4 Tạo Tickets tương ứng
+      const tickets = ticketPayloads.map((item) =>
+        queryRunner.manager.create(Ticket, {
+          ticketCode: `TK-${savedBooking.id}-${item.seatId}-${Math.floor(1000 + Math.random() * 9000)}`,
+          bookingId: savedBooking.id,
+          seatId: item.seatId,
+          price: item.price,
+          status: 'PENDING',
+        }),
+      );
+      await queryRunner.manager.save(Ticket, tickets);
+
+      await queryRunner.commitTransaction();
+
+      // Đăng ký key theo dõi hết hạn đơn hàng trên Redis (300 giây)
+      await redisClient.set(
+        `booking_hold:${savedBooking.bookingCode}`,
+        JSON.stringify({
+          bookingId: savedBooking.id,
+          showtimeId,
+          seatIds: uniqueSeatIds,
+          userId,
+        }),
+        'EX',
+        HOLD_TTL_SECONDS,
+      );
+
+      return this.findBookingWithDetails(savedBooking.id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Thanh toán giả lập Stripe Test Mode (UC8)
+   */
+  async mockStripePayment(userId: number, dto: MockStripePaymentDto) {
+    const { bookingCode, stripeToken = 'tok_visa' } = dto;
+
+    const booking = await this.bookingRepository.findOne({
+      where: { bookingCode },
+      relations: {
+        tickets: true,
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Không tìm thấy thông tin đơn đặt vé');
+    }
+
+    if (booking.userId !== userId) {
+      throw new BadRequestException('Bạn không sở hữu đơn đặt vé này');
+    }
+
+    if (booking.status === BookingStatus.CONFIRMED) {
+      return {
+        success: true,
+        message: 'Đơn đặt vé này đã được thanh toán từ trước',
+        data: await this.findBookingWithDetails(booking.id),
+      };
+    }
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new BadRequestException('Đơn đặt vé đã bị hủy hoặc đã hết hạn giữ chỗ');
+    }
+
+    // Kiểm tra ghế còn hạn giữ chỗ trên Redis hay không
+    const redisClient = this.redisService.getClient();
+    const seatIds = booking.tickets.map((t) => t.seatId);
+
+    for (const seatId of seatIds) {
+      const seatKey = `seat_lock:showtime:${booking.showtimeId}:seat:${seatId}`;
+      const holder = await redisClient.get(seatKey);
+      if (holder !== userId.toString()) {
+        // Đã quá hạn 5 phút và ghế đã bị giải phóng
+        await this.expireBooking(booking.id);
+        throw new ConflictException(
+          'Thời gian giữ ghế (5 phút) đã kết thúc, đơn đặt vé đã bị hủy tự động. Vui lòng đặt lại!',
+        );
+      }
+    }
+
+    // Thực hiện cập nhật trạng thái thanh toán thành công
+    const transactionId = `ch_stripe_mock_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    await this.dataSource.transaction(async (manager) => {
+      booking.status = BookingStatus.CONFIRMED;
+      booking.paymentStatus = PaymentStatus.PAID;
+      booking.paymentTransactionId = transactionId;
+      await manager.save(Booking, booking);
+
+      // Cập nhật vé thành VALID
+      await manager.update(
+        Ticket,
+        { bookingId: booking.id },
+        { status: 'VALID' },
+      );
+    });
+
+    // Giải phóng lock Redis vì ghế đã chính thức thuộc về user này trong MySQL
+    for (const seatId of seatIds) {
+      await this.redisService.releaseSeat(booking.showtimeId, seatId, userId, true);
+    }
+    await redisClient.del(`booking_hold:${booking.bookingCode}`);
+
+    this.logger.log(`Thanh toán Stripe thành công cho booking [${bookingCode}]`);
+
     return {
-      message: 'TODO: Định viết logic tạo booking với MySQL Transaction',
-      userId,
-      payload: dto,
+      success: true,
+      message: 'Thanh toán qua Stripe thành công! Vé đã được xác nhận.',
+      data: {
+        booking: await this.findBookingWithDetails(booking.id),
+        payment: {
+          transactionId,
+          stripeToken,
+          amount: booking.totalAmount,
+          currency: 'VND',
+          paidAt: new Date(),
+        },
+      },
     };
   }
 
-  async mockStripePayment(userId: number, dto: MockStripePaymentDto) {
-    // TODO: Định viết logic xử lý thanh toán Stripe (Mock):
-    // 1. Tìm đơn booking
-    // 2. Chuyển trạng thái sang CONFIRMED và PAID
-    // 3. Giải phóng lock Redis cho các ghế đã thanh toán thành công
-    return {
-      message: 'TODO: Định viết logic thanh toán Stripe Test Mode',
-      userId,
-      bookingCode: dto.bookingCode,
-    };
+  /**
+   * Hủy đơn booking và vé khi hết hạn giữ chỗ (Tự động kích hoạt bởi Sweeper / Keyspace Event)
+   */
+  async expireBooking(bookingId: number): Promise<boolean> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: {
+        tickets: true,
+      },
+    });
+
+    if (!booking || booking.status !== BookingStatus.PENDING) {
+      return false;
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      booking.status = BookingStatus.CANCELLED;
+      booking.paymentStatus = PaymentStatus.FAILED;
+      await manager.save(Booking, booking);
+
+      if (booking.tickets && booking.tickets.length > 0) {
+        await manager.update(
+          Ticket,
+          { bookingId: booking.id },
+          { status: 'CANCELLED' },
+        );
+      }
+    });
+
+    // Giải phóng ghế trên Redis nếu còn sót
+    if (booking.tickets && booking.tickets.length > 0) {
+      for (const t of booking.tickets) {
+        await this.redisService.releaseSeat(booking.showtimeId, t.seatId, booking.userId, true);
+      }
+    }
+
+    const redisClient = this.redisService.getClient();
+    await redisClient.del(`booking_hold:${booking.bookingCode}`);
+
+    this.logger.log(`Đã hủy tự động đơn booking [${booking.bookingCode}] do quá hạn 5 phút.`);
+    return true;
+  }
+
+  private async findBookingWithDetails(bookingId: number): Promise<Booking> {
+    const res = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: {
+        tickets: {
+          seat: true,
+        },
+        showtime: {
+          movie: true,
+        },
+        user: true,
+      },
+    });
+    return res!;
   }
 }
