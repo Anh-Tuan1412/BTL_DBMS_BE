@@ -6,11 +6,11 @@ import { Showtime } from '../../database/entities/showtime.entity';
 import { Seat } from '../../database/entities/seat.entity';
 import { BookingsService } from './bookings.service';
 import { BookingsController } from './bookings.controller';
-import { SeatHoldExpiryService } from './seat-hold-expiry.service';
+
 @Module({
   imports: [TypeOrmModule.forFeature([Booking, Ticket, Showtime, Seat])],
   controllers: [BookingsController],
-  providers: [BookingsService, SeatHoldExpiryService],
-  exports: [BookingsService, SeatHoldExpiryService],
+  providers: [BookingsService],
+  exports: [BookingsService],
 })
 export class BookingsModule {}
