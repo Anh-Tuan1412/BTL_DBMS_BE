@@ -6,13 +6,16 @@ import {
   UpdateDateColumn,
   Index,
   OneToMany,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { MovieStatus } from '../../common/enums';
 import { Showtime } from './showtime.entity';
+import { Genre } from './genre.entity';
 
 @Entity('movies')
 export class Movie {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'movie_id' })
   id: number;
 
   @Index('idx_movie_title')
@@ -22,46 +25,53 @@ export class Movie {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'int', default: 120 })
+  @Column({ name: 'duration', type: 'int' })
   durationMinutes: number;
 
   @Index('idx_movie_release_date')
-  @Column({ type: 'date' })
+  @Column({ name: 'release_date', type: 'date', nullable: true })
   releaseDate: Date;
 
-  @Index('idx_movie_genre')
-  @Column({ length: 100, nullable: true })
-  genre: string;
+  @ManyToMany(() => Genre, { eager: true })
+  @JoinTable({
+    name: 'movie_genres',
+    joinColumn: { name: 'movie_id' },
+    inverseJoinColumn: { name: 'genre_id' },
+  })
+  genres: Genre[];
+
+  @Column({ name: 'age_rating', length: 10, nullable: true })
+  ageRating: string;
 
   @Column({ length: 100, nullable: true })
   director: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'cast_members', type: 'text', nullable: true })
   cast: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'poster_url', type: 'text', nullable: true })
   posterUrl: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'trailer_url', type: 'text', nullable: true })
   trailerUrl: string;
 
   @Index('idx_movie_status')
   @Column({
     type: 'enum',
     enum: MovieStatus,
-    default: MovieStatus.NOW_SHOWING,
+    default: MovieStatus.COMING_SOON,
   })
   status: MovieStatus;
 
-  @Column({ type: 'decimal', precision: 3, scale: 1, default: 8.5 })
+  @Column({ type: 'decimal', precision: 3, scale: 1, default: 0 })
   rating: number;
 
   @OneToMany(() => Showtime, (showtime) => showtime.movie)
   showtimes: Showtime[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

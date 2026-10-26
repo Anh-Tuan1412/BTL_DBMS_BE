@@ -48,7 +48,7 @@ export class BookingsController {
   @Post('pay-mock')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'UC8: Thanh toán qua Stripe Test Mode (Mô phỏng)',
+    summary: 'UC8: Thanh toán mô phỏng nội bộ (chưa gọi Stripe)',
     description:
       'Xác nhận thanh toán, chuyển status sang CONFIRMED, vé thành VALID và giải phóng khóa Redis.',
   })

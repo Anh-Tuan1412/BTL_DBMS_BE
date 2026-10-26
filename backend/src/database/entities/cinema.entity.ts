@@ -11,26 +11,32 @@ import { CinemaRoom } from './cinema-room.entity';
 
 @Entity('cinemas')
 export class Cinema {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ name: 'cinema_id' })
   id: number;
 
   @Index('idx_cinema_name')
-  @Column({ length: 150 })
+  @Column({ name: 'cinema_name', length: 150 })
   name: string;
 
-  @Column({ length: 255 })
+  @Column({ name: 'address', length: 255 })
   address: string;
 
   @Index('idx_cinema_city')
-  @Column({ length: 100 })
+  @Column({ name: 'city', length: 100 })
   city: string;
+
+  @Column({ length: 15, nullable: true })
+  phone: string;
+
+  @Column({ type: 'enum', enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' })
+  status: string;
 
   @OneToMany(() => CinemaRoom, (room) => room.cinema, { cascade: true })
   rooms: CinemaRoom[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

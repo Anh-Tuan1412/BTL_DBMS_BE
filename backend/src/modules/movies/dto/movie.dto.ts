@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, PartialType } from '@nestjs/swagger';
 import {
   IsNotEmpty,
   IsOptional,
@@ -7,13 +7,15 @@ import {
   IsEnum,
   IsNumber,
   Min,
+  IsArray,
+  IsString,
 } from 'class-validator';
 import { MovieStatus } from '../../../common/enums';
 
 export class CreateMovieDto {
   @ApiProperty({ example: 'Oppenheimer', description: 'Tên phim' })
   @IsNotEmpty({ message: 'Tên phim không được để trống' })
-  title: string;
+  title!: string;
 
   @ApiProperty({
     example: 'Phim tiểu sử về J. Robert Oppenheimer...',
@@ -25,18 +27,29 @@ export class CreateMovieDto {
   @ApiProperty({ example: 180, description: 'Thời lượng phim tính bằng phút' })
   @IsInt()
   @Min(1)
-  durationMinutes: number;
+  durationMinutes!: number;
 
   @ApiProperty({
     example: '2026-09-20',
     description: 'Ngày khởi chiếu (YYYY-MM-DD)',
   })
   @IsDateString()
-  releaseDate: string;
+  releaseDate!: string;
 
-  @ApiProperty({ example: 'Tiểu sử, Lịch sử, Kịch tính', required: false })
+  @ApiProperty({
+    example: [1, 2, 3],
+    description: 'Danh sách ID thể loại phim',
+    required: false,
+  })
   @IsOptional()
-  genre?: string;
+  @IsArray()
+  @IsInt({ each: true })
+  genreIds?: number[];
+
+  @ApiProperty({ example: 'C18', description: 'Phân loại độ tuổi (C13, C16, C18, P)', required: false })
+  @IsOptional()
+  @IsString()
+  ageRating?: string;
 
   @ApiProperty({ example: 'Christopher Nolan', required: false })
   @IsOptional()
@@ -78,49 +91,4 @@ export class CreateMovieDto {
   rating?: number;
 }
 
-export class UpdateMovieDto {
-  @ApiProperty({ required: false })
-  @IsOptional()
-  title?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  description?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  durationMinutes?: number;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  releaseDate?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  genre?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  director?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  cast?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  posterUrl?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  trailerUrl?: string;
-
-  @ApiProperty({ enum: MovieStatus, required: false })
-  @IsOptional()
-  @IsEnum(MovieStatus)
-  status?: MovieStatus;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  rating?: number;
-}
+export class UpdateMovieDto extends PartialType(CreateMovieDto) {}

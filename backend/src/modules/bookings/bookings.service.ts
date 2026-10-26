@@ -29,14 +29,6 @@ export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
 
   constructor(
-    @InjectRepository(Booking)
-    private readonly bookingRepository: Repository<Booking>,
-    @InjectRepository(Ticket)
-    private readonly ticketRepository: Repository<Ticket>,
-    @InjectRepository(Showtime)
-    private readonly showtimeRepository: Repository<Showtime>,
-    @InjectRepository(Seat)
-    private readonly seatRepository: Repository<Seat>,
     private readonly redisService: RedisService,
     private readonly dataSource: DataSource,
   ) {}

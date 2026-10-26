@@ -1,14 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, Movie, Cinema, CinemaRoom, Seat, Showtime } from '../entities';
+import {
+  User,
+  Movie,
+  Cinema,
+  CinemaRoom,
+  Seat,
+  SeatTypeEntity,
+  Genre,
+} from '../entities';
+import { ShowtimesService } from '../../modules/showtimes/showtimes.service';
 import { UserRole, SeatType, MovieStatus } from '../../common/enums';
 
 @Injectable()
 export class SeedService {
   private readonly logger = new Logger(SeedService.name);
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly showtimesService: ShowtimesService,
+  ) {}
 
   async runSeed() {
     this.logger.log('Bắt đầu khởi tạo dữ liệu mẫu (Seed Data)...');
@@ -18,7 +30,35 @@ export class SeedService {
     const cinemaRepo = this.dataSource.getRepository(Cinema);
     const roomRepo = this.dataSource.getRepository(CinemaRoom);
     const seatRepo = this.dataSource.getRepository(Seat);
-    const showtimeRepo = this.dataSource.getRepository(Showtime);
+    const typeRepo = this.dataSource.getRepository(SeatTypeEntity);
+    await typeRepo
+      .createQueryBuilder()
+      .insert()
+      .values([
+        { name: SeatType.REGULAR, priceCoefficient: 1 },
+        { name: SeatType.VIP, priceCoefficient: 1.2 },
+        { name: SeatType.COUPLE, priceCoefficient: 1.5 },
+      ])
+      .orIgnore()
+      .updateEntity(false)
+      .execute();
+    const types = await typeRepo.find();
+    const genreRepo = this.dataSource.getRepository(Genre);
+    const genreNames = [
+      'Khoa học viễn tưởng',
+      'Phiêu lưu',
+      'Tiểu sử',
+      'Lịch sử',
+      'Chính kịch',
+    ];
+    await genreRepo
+      .createQueryBuilder()
+      .insert()
+      .values(genreNames.map((name) => ({ name })))
+      .orIgnore()
+      .updateEntity(false)
+      .execute();
+    const genres = await genreRepo.find();
 
     // 1. Tạo Users mẫu (Admin & Customer)
     const existingAdmin = await userRepo.findOne({
@@ -74,7 +114,7 @@ export class SeedService {
         roomRepo.create({
           name: 'Phòng 02 - Gold Class',
           cinemaId: cinema.id,
-          totalSeats: 30,
+          totalSeats: 0,
         }),
       );
 
@@ -89,8 +129,10 @@ export class SeedService {
             row,
             column: col,
             seatNumber: `${row}${col}`,
-            type: isVip ? SeatType.VIP : SeatType.REGULAR,
-            priceMultiplier: isVip ? 1.25 : 1.0,
+            seatTypeId: types.find(
+              (type) =>
+                type.name === String(isVip ? SeatType.VIP : SeatType.REGULAR),
+            )!.id,
           });
         }
       }
@@ -116,7 +158,9 @@ export class SeedService {
             'Hành trình huyền thoại của Paul Atreides khi anh hợp nhất với Chani và Fremen để trả thù...',
           durationMinutes: 166,
           releaseDate: new Date('2026-03-01'),
-          genre: 'Khoa học viễn tưởng, Phiêu lưu',
+          genres: genres.filter((genre) =>
+            ['Khoa học viễn tưởng', 'Phiêu lưu'].includes(genre.name),
+          ),
           director: 'Denis Villeneuve',
           cast: 'Timothée Chalamet, Zendaya, Rebecca Ferguson',
           posterUrl:
@@ -134,7 +178,9 @@ export class SeedService {
             'Câu chuyện về nhà vật lý lý thuyết J. Robert Oppenheimer, cha đẻ của bom nguyên tử...',
           durationMinutes: 180,
           releaseDate: new Date('2026-02-15'),
-          genre: 'Tiểu sử, Lịch sử, Chính kịch',
+          genres: genres.filter((genre) =>
+            ['Tiểu sử', 'Lịch sử', 'Chính kịch'].includes(genre.name),
+          ),
           director: 'Christopher Nolan',
           cast: 'Cillian Murphy, Emily Blunt, Matt Damon',
           posterUrl:
@@ -156,15 +202,13 @@ export class SeedService {
         const endTomorrow = new Date(tomorrow);
         endTomorrow.setHours(21, 46, 0, 0);
 
-        await showtimeRepo.save([
-          showtimeRepo.create({
-            movieId: movieDune.id,
-            roomId: room1.id,
-            startTime: tomorrow,
-            endTime: endTomorrow,
-            basePrice: 100000,
-          }),
-        ]);
+        await this.showtimesService.create({
+          movieId: movieDune.id,
+          roomId: room1.id,
+          startTime: tomorrow.toISOString(),
+          endTime: endTomorrow.toISOString(),
+          basePrice: 100000,
+        });
         this.logger.log('-> Đã tạo suất chiếu mẫu cho ngày mai');
       }
     }

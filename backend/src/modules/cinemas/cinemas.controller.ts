@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Body,
   Param,
@@ -10,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CinemasService } from './cinemas.service';
-import { CreateCinemaDto, CreateRoomDto } from './dto/cinema.dto';
+import { CreateCinemaDto, CreateRoomDto, UpdateCinemaDto, UpdateRoomDto } from './dto/cinema.dto';
 import { Public, Roles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { UserRole } from '../../common/enums';
@@ -19,6 +20,10 @@ import { UserRole } from '../../common/enums';
 @Controller('cinemas')
 export class CinemasController {
   constructor(private readonly cinemasService: CinemasService) {}
+
+  // ==========================================
+  // 1. PUBLIC ENDPOINTS
+  // ==========================================
 
   @Public()
   @Get()
@@ -41,6 +46,10 @@ export class CinemasController {
     return this.cinemasService.findRoomsByCinema(cinemaId);
   }
 
+  // ==========================================
+  // 2. ADMIN ENDPOINTS - QUẢN LÝ RẠP
+  // ==========================================
+
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
@@ -53,11 +62,24 @@ export class CinemasController {
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
+  @Put(':id')
+  @ApiOperation({ summary: 'Cập nhật thông tin rạp (Chỉ ADMIN)' })
+  updateCinema(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCinemaDto) {
+    return this.cinemasService.updateCinema(id, dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa rạp chiếu phim (Chỉ dành cho ADMIN)' })
   deleteCinema(@Param('id', ParseIntPipe) id: number) {
     return this.cinemasService.deleteCinema(id);
   }
+
+  // ==========================================
+  // 3. ADMIN ENDPOINTS - QUẢN LÝ PHÒNG CHIẾU
+  // ==========================================
 
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -66,6 +88,15 @@ export class CinemasController {
   @ApiOperation({ summary: 'Thêm phòng chiếu cho rạp (Chỉ dành cho ADMIN)' })
   createRoom(@Body() dto: CreateRoomDto) {
     return this.cinemasService.createRoom(dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Put('rooms/:id')
+  @ApiOperation({ summary: 'Cập nhật thông tin phòng chiếu (Chỉ ADMIN)' })
+  updateRoom(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoomDto) {
+    return this.cinemasService.updateRoom(id, dto);
   }
 
   @ApiBearerAuth('JWT-auth')
