@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS movies (
 
 
 -- =========================================================
--- 7. SHOWTIMES - Suất chiếu
+-- 7. SHOWTIMES & GENRES - Suất chiếu & Thể loại
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS genres (
@@ -267,11 +267,11 @@ CREATE TABLE IF NOT EXISTS vouchers (
     voucher_id INT AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(50) NOT NULL UNIQUE,
     discount_type ENUM('PERCENTAGE', 'FIXED_AMOUNT') NOT NULL,
-    discount_value DECIMAL(10,2) NOT NULL, -- Giá trị giảm (% hoặc số tiền cụ thể)
-    min_order_value DECIMAL(10,2) DEFAULT 0, -- Giá trị đơn hàng tối thiểu để áp dụng
-    max_discount DECIMAL(10,2) NULL, -- Mức giảm tối đa (đối với giảm theo %)
-    usage_limit INT NOT NULL DEFAULT 100, -- Số lượng mã có thể sử dụng
-    used_count INT NOT NULL DEFAULT 0, -- Số lần đã được dùng
+    discount_value DECIMAL(10,2) NOT NULL,
+    min_order_value DECIMAL(10,2) DEFAULT 0,
+    max_discount DECIMAL(10,2) NULL,
+    usage_limit INT NOT NULL DEFAULT 100,
+    used_count INT NOT NULL DEFAULT 0,
     start_date DATETIME NOT NULL,
     end_date DATETIME NOT NULL,
     status ENUM('ACTIVE', 'EXPIRED', 'DISABLED') NOT NULL DEFAULT 'ACTIVE',
@@ -284,7 +284,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
 
 
 -- =========================================================
--- 10. BOOKINGS - Đơn đặt vé (ĐÃ ĐƯỢC CHỈNH SỬA TÍCH HỢP VOUCHER)
+-- 10. BOOKINGS - Đơn đặt vé
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS bookings (
@@ -293,10 +293,10 @@ CREATE TABLE IF NOT EXISTS bookings (
 
     user_id INT NOT NULL,
     showtime_id INT NOT NULL,
-    voucher_id INT NULL, -- Liên kết mã giảm giá (nếu có sử dụng)
+    voucher_id INT NULL,
 
-    total_amount DECIMAL(10,2) NOT NULL DEFAULT 0, -- Tổng tiền thanh toán cuối cùng
-    discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0, -- Số tiền được giảm từ voucher
+    total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+    discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
 
     booking_status ENUM(
         'PENDING',
@@ -305,7 +305,6 @@ CREATE TABLE IF NOT EXISTS bookings (
         'EXPIRED'
     ) NOT NULL DEFAULT 'PENDING',
 
-    -- Dùng cho booking đang giữ ghế (Redis quản lý TTL chính)
     hold_expires_at DATETIME NULL,
 
     cancelled_at DATETIME NULL,
@@ -329,7 +328,6 @@ CREATE TABLE IF NOT EXISTS bookings (
 
     CONSTRAINT chk_booking_amount
         CHECK (total_amount >= 0 AND discount_amount >= 0),
-    CONSTRAINT chk_pending_expiry CHECK (booking_status <> 'PENDING' OR hold_expires_at IS NOT NULL),
 
     UNIQUE KEY uq_booking_showtime (booking_id, showtime_id),
     INDEX idx_bookings_user_created (user_id, created_at),
@@ -342,11 +340,9 @@ CREATE TABLE IF NOT EXISTS bookings (
 
 
 -- =========================================================
--- 11. BOOKING DETAILS - Chi tiết vé / ghế đã đặt
+-- 11. BOOKING DETAILS - Chi tiết vé & Tồn kho ghế
 -- =========================================================
 
--- One inventory row per physical seat per screening. History remains in booking_details.
--- Composite foreign keys enforce the same room for both seat and screening.
 CREATE TABLE IF NOT EXISTS showtime_seats (
     showtime_id INT NOT NULL,
     seat_id INT NOT NULL,
@@ -402,7 +398,7 @@ CREATE TABLE IF NOT EXISTS booking_details (
 
 
 -- =========================================================
--- 12. BOOKING COMBOS - Chi tiết bắp nước đi kèm đơn đặt vé 
+-- 12. BOOKING COMBOS - Bắp nước đi kèm đơn
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS booking_combos (
@@ -410,7 +406,7 @@ CREATE TABLE IF NOT EXISTS booking_combos (
     booking_id INT NOT NULL,
     combo_id INT NOT NULL,
     quantity INT NOT NULL DEFAULT 1,
-    unit_price DECIMAL(10,2) NOT NULL, -- Giá tại thời điểm mua
+    unit_price DECIMAL(10,2) NOT NULL,
 
     CONSTRAINT fk_booking_combos_booking
         FOREIGN KEY (booking_id)
@@ -428,7 +424,7 @@ CREATE TABLE IF NOT EXISTS booking_combos (
 
 
 -- =========================================================
--- 13. PAYMENTS - Thanh toán 
+-- 13. PAYMENTS - Thanh toán
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -490,8 +486,6 @@ CREATE TABLE IF NOT EXISTS payments (
 ) ENGINE=InnoDB;
 
 
--- Stripe webhook inbox: insert event ID and change payment/booking state in one transaction.
--- This table does not replace signature verification in the future Stripe endpoint.
 CREATE TABLE IF NOT EXISTS payment_events (
     stripe_event_id VARCHAR(255) PRIMARY KEY,
     payment_id INT NOT NULL,
@@ -500,34 +494,174 @@ CREATE TABLE IF NOT EXISTS payment_events (
     FOREIGN KEY (payment_id) REFERENCES payments(payment_id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
--- =========================================================
--- 14. INDEX PHỤC VỤ TÌM KIẾM / LỌC
--- =========================================================
-
--- Indexes are declared in their CREATE TABLE statements.
-
-
--- =========================================================
--- 15. DỮ LIỆU MẪU KHỞI TẠO (SEED DATA)
--- =========================================================
-
-INSERT INTO seat_types
-    (type_name, price_coefficient)
-VALUES
-    ('REGULAR', 1.00),
-    ('VIP', 1.20),
-    ('COUPLE', 1.50)
-ON DUPLICATE KEY UPDATE
-    price_coefficient = VALUES(price_coefficient);
-
-INSERT INTO combos (combo_name, description, price)
-VALUES
-    ('Combo Solo', '1 Bắp lớn + 1 Nước ngọt lớn', 75000.00),
-    ('Combo Couple', '1 Bắp lớn + 2 Nước ngọt lớn', 99000.00)
-ON DUPLICATE KEY UPDATE
-    price = VALUES(price);
 CREATE TABLE IF NOT EXISTS schema_metadata (
     version INT PRIMARY KEY,
     installed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
+
+
+-- =========================================================
+-- 15. DỮ LIỆU SEED DANH MỤC BAN ĐẦU HOÀN CHỈNH
+-- =========================================================
+
+-- 15.1. Seat Types
+INSERT INTO seat_types (seat_type_id, type_name, price_coefficient) VALUES
+(1, 'REGULAR', 1.00),
+(2, 'VIP', 1.20),
+(3, 'COUPLE', 1.50)
+ON DUPLICATE KEY UPDATE price_coefficient = VALUES(price_coefficient);
+
+-- 15.2. Combos
+INSERT INTO combos (combo_id, combo_name, description, price) VALUES
+(1, 'Combo Solo', '1 Bắp lớn + 1 Nước ngọt lớn', 75000.00),
+(2, 'Combo Couple', '1 Bắp lớn + 2 Nước ngọt lớn', 99000.00),
+(3, 'Combo Family', '2 Bắp lớn + 3 Nước ngọt lớn', 159000.00)
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+
+-- 15.3. Vouchers
+INSERT INTO vouchers (voucher_id, code, discount_type, discount_value, min_order_value, max_discount, usage_limit, used_count, start_date, end_date, status) VALUES
+(1, 'WELCOME2026', 'PERCENTAGE', 10.00, 100000.00, 50000.00, 100, 0, '2026-01-01 00:00:00', '2026-12-31 23:59:59', 'ACTIVE'),
+(2, 'VIPCINEMA50K', 'FIXED_AMOUNT', 50000.00, 200000.00, NULL, 50, 0, '2026-01-01 00:00:00', '2026-12-31 23:59:59', 'ACTIVE')
+ON DUPLICATE KEY UPDATE code = VALUES(code);
+
+-- 15.4. Genres
+INSERT INTO genres (genre_id, genre_name) VALUES
+(1, 'Khoa học viễn tưởng'), (2, 'Phiêu lưu'), (3, 'Tiểu sử'), (4, 'Lịch sử'),
+(5, 'Chính kịch'), (6, 'Hành động'), (7, 'Hài hước'), (8, 'Siêu anh hùng'),
+(9, 'Quái thú'), (10, 'Giả tưởng'), (11, 'Hoạt hình'), (12, 'Gia đình'), (13, 'Giật gân')
+ON DUPLICATE KEY UPDATE genre_name = VALUES(genre_name);
+
+-- 15.5. Users
+INSERT INTO users (user_id, fullname, email, phone, password_hash, role, status) VALUES
+-- HaQuach@26
+(1, 'Quách Văn Hà', 'ha.quach@cinema.vn', '0901234567', '$2b$10$ZpdtqkpANRgcN9kHO0ESWuPNeuS4NwOtDEox1cupmAIj48urHMjYa', 'ADMIN', 'ACTIVE'),
+-- lonGi123
+(2, 'Nguyễn Hoàng Long', 'long.nguyen@cinema.vn', '0908889999', '$2b$10$4jJ56avcszDov9VQ9gSfqOPt.0bNKY1uAVhO3Tlz5YespyN0LgJQy', 'ADMIN', 'ACTIVE'),
+-- 123456
+(3, 'Trần Bảo Nam', 'nam.tran@cinema.vn', '0902223344', '$2b$10$uhfz.aw7.eMuJ.Dk4bA5beOJ3RjTGriZ2UDGqBPfz2iWtz.XC9mv.', 'ADMIN', 'ACTIVE'),
+-- pThao09
+(4, 'Lê Phương Thảo', 'thao.le@cinema.vn', '0903334455', '$2b$10$ysLGfmLiN1qgKfYk9twADe8ByhD0VPU0y7TynSQnqIGys/N0kP5t2', 'ADMIN', 'ACTIVE'),
+-- maimai@#
+(5, 'Trần Thị Mai', 'mai.tran@gmail.com', '0981112233', '$2b$10$f86zwD2P9UuljXQrrQHs5euXUzE1aWJs8pL6FEqWivNC1Pmwk0VqK', 'CUSTOMER', 'ACTIVE'),
+-- DUC112233$
+(6, 'Phạm Minh Đức', 'duc.pham@gmail.com', '0982223344', '$2b$10$bFkIbP3ffdqOxAkDiueKiebSSBmwOW0rFWhOw5I6zhJqLhINU/g0e', 'CUSTOMER', 'ACTIVE'),
+-- Linhvu@
+(7, 'Vũ Thảo Linh', 'linh.vu@gmail.com', '0983334455', '$2b$10$d4FlWuK12dUXPoNYxl.17uNeVh0PVdAU9cRsTsmK2nC0tCzAnVASO', 'CUSTOMER', 'ACTIVE'),
+-- Huydang999
+(8, 'Đặng Quốc Huy', 'huy.dang@gmail.com', '0984445566', '$2b$10$Xh1hNUKD5r1SEsqBk/G4OucZ.1w1qNGjS.RaloeNKMkqcldmJbNKe', 'CUSTOMER', 'ACTIVE'),
+-- anhNGOC67
+(9, 'Bùi Ngọc Ánh', 'anh.bui@gmail.com', '0985556677', '$2b$10$2.P.HyZJKtfNvxD/7eVEsuaVnxN7JUOymIQUJsvyv8BuxziAJn3gm', 'CUSTOMER', 'ACTIVE'),
+-- Longlong7788
+(10, 'Đỗ Thành Long', 'long.do@gmail.com', '0986667788', '$2b$10$mZWEz.WltIZP.a5unaS/f.Gnl9gW4f3W0SdcSW7zmh7l5pbEzd1US', 'CUSTOMER', 'ACTIVE')
+ON DUPLICATE KEY UPDATE fullname = VALUES(fullname);
+
+-- 15.6. Cinemas & Rooms
+INSERT INTO cinemas (cinema_id, cinema_name, address, city, phone, status) VALUES
+(1, 'CGV Landmark 81', '772 Điện Biên Phủ, Phường 22, Bình Thạnh', 'TP. Hồ Chí Minh', '02839998888', 'ACTIVE'),
+(2, 'Galaxy Sala', 'Tầng 3 Thiso Mall Sala, 10 Mai Chí Thọ, Thủ Đức', 'TP. Hồ Chí Minh', '02837779999', 'ACTIVE'),
+(3, 'Lotte Cinema Gò Vấp', 'Tầng 4 Lotte Mart, 242 Nguyễn Văn Lượng, Gò Vấp', 'TP. Hồ Chí Minh', '02836665555', 'ACTIVE'),
+(4, 'BHD Star Cầu Giấy', 'Tầng 8 Discovery Complex, 302 Cầu Giấy', 'Hà Nội', '02438889999', 'ACTIVE')
+ON DUPLICATE KEY UPDATE cinema_name = VALUES(cinema_name);
+
+INSERT INTO rooms (room_id, cinema_id, room_name, total_seats, status) VALUES
+(1, 1, 'Phòng 01 - IMAX Laser', 40, 'ACTIVE'),
+(2, 1, 'Phòng 02 - Gold Class', 30, 'ACTIVE'),
+(3, 2, 'Phòng 01 - IMAX', 40, 'ACTIVE'),
+(4, 2, 'Phòng 02 - Atmos', 40, 'ACTIVE'),
+(5, 3, 'Phòng 01 - Super Plex', 40, 'ACTIVE'),
+(6, 3, 'Phòng 02 - Standard 2D', 30, 'ACTIVE'),
+(7, 4, 'Phòng 01 - First Class', 30, 'ACTIVE'),
+(8, 4, 'Phòng 02 - Digital 2D', 30, 'ACTIVE')
+ON DUPLICATE KEY UPDATE room_name = VALUES(room_name);
+
+-- 15.7. Seats (ĐẦY ĐỦ 280 GHẾ CHO TOÀN BỘ 8 PHÒNG CHIẾU)
+-- Room 1 (40 ghế: A1-D10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(1, 'A', 1, 'A1', 1, 'AVAILABLE'), (1, 'A', 2, 'A2', 1, 'AVAILABLE'), (1, 'A', 3, 'A3', 1, 'AVAILABLE'), (1, 'A', 4, 'A4', 1, 'AVAILABLE'), (1, 'A', 5, 'A5', 1, 'AVAILABLE'), (1, 'A', 6, 'A6', 1, 'AVAILABLE'), (1, 'A', 7, 'A7', 1, 'AVAILABLE'), (1, 'A', 8, 'A8', 1, 'AVAILABLE'), (1, 'A', 9, 'A9', 1, 'AVAILABLE'), (1, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(1, 'B', 1, 'B1', 1, 'AVAILABLE'), (1, 'B', 2, 'B2', 1, 'AVAILABLE'), (1, 'B', 3, 'B3', 1, 'AVAILABLE'), (1, 'B', 4, 'B4', 1, 'AVAILABLE'), (1, 'B', 5, 'B5', 1, 'AVAILABLE'), (1, 'B', 6, 'B6', 1, 'AVAILABLE'), (1, 'B', 7, 'B7', 1, 'AVAILABLE'), (1, 'B', 8, 'B8', 1, 'AVAILABLE'), (1, 'B', 9, 'B9', 1, 'AVAILABLE'), (1, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(1, 'C', 1, 'C1', 2, 'AVAILABLE'), (1, 'C', 2, 'C2', 2, 'AVAILABLE'), (1, 'C', 3, 'C3', 2, 'AVAILABLE'), (1, 'C', 4, 'C4', 2, 'AVAILABLE'), (1, 'C', 5, 'C5', 2, 'AVAILABLE'), (1, 'C', 6, 'C6', 2, 'AVAILABLE'), (1, 'C', 7, 'C7', 2, 'AVAILABLE'), (1, 'C', 8, 'C8', 2, 'AVAILABLE'), (1, 'C', 9, 'C9', 2, 'AVAILABLE'), (1, 'C', 10, 'C10', 2, 'AVAILABLE'),
+(1, 'D', 1, 'D1', 2, 'AVAILABLE'), (1, 'D', 2, 'D2', 2, 'AVAILABLE'), (1, 'D', 3, 'D3', 2, 'AVAILABLE'), (1, 'D', 4, 'D4', 2, 'AVAILABLE'), (1, 'D', 5, 'D5', 2, 'AVAILABLE'), (1, 'D', 6, 'D6', 2, 'AVAILABLE'), (1, 'D', 7, 'D7', 2, 'AVAILABLE'), (1, 'D', 8, 'D8', 2, 'AVAILABLE'), (1, 'D', 9, 'D9', 2, 'AVAILABLE'), (1, 'D', 10, 'D10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- Room 2 (30 ghế: A1-C10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(2, 'A', 1, 'A1', 1, 'AVAILABLE'), (2, 'A', 2, 'A2', 1, 'AVAILABLE'), (2, 'A', 3, 'A3', 1, 'AVAILABLE'), (2, 'A', 4, 'A4', 1, 'AVAILABLE'), (2, 'A', 5, 'A5', 1, 'AVAILABLE'), (2, 'A', 6, 'A6', 1, 'AVAILABLE'), (2, 'A', 7, 'A7', 1, 'AVAILABLE'), (2, 'A', 8, 'A8', 1, 'AVAILABLE'), (2, 'A', 9, 'A9', 1, 'AVAILABLE'), (2, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(2, 'B', 1, 'B1', 1, 'AVAILABLE'), (2, 'B', 2, 'B2', 1, 'AVAILABLE'), (2, 'B', 3, 'B3', 1, 'AVAILABLE'), (2, 'B', 4, 'B4', 1, 'AVAILABLE'), (2, 'B', 5, 'B5', 1, 'AVAILABLE'), (2, 'B', 6, 'B6', 1, 'AVAILABLE'), (2, 'B', 7, 'B7', 1, 'AVAILABLE'), (2, 'B', 8, 'B8', 1, 'AVAILABLE'), (2, 'B', 9, 'B9', 1, 'AVAILABLE'), (2, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(2, 'C', 1, 'C1', 2, 'AVAILABLE'), (2, 'C', 2, 'C2', 2, 'AVAILABLE'), (2, 'C', 3, 'C3', 2, 'AVAILABLE'), (2, 'C', 4, 'C4', 2, 'AVAILABLE'), (2, 'C', 5, 'C5', 2, 'AVAILABLE'), (2, 'C', 6, 'C6', 2, 'AVAILABLE'), (2, 'C', 7, 'C7', 2, 'AVAILABLE'), (2, 'C', 8, 'C8', 2, 'AVAILABLE'), (2, 'C', 9, 'C9', 2, 'AVAILABLE'), (2, 'C', 10, 'C10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- Room 3 (40 ghế: A1-D10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(3, 'A', 1, 'A1', 1, 'AVAILABLE'), (3, 'A', 2, 'A2', 1, 'AVAILABLE'), (3, 'A', 3, 'A3', 1, 'AVAILABLE'), (3, 'A', 4, 'A4', 1, 'AVAILABLE'), (3, 'A', 5, 'A5', 1, 'AVAILABLE'), (3, 'A', 6, 'A6', 1, 'AVAILABLE'), (3, 'A', 7, 'A7', 1, 'AVAILABLE'), (3, 'A', 8, 'A8', 1, 'AVAILABLE'), (3, 'A', 9, 'A9', 1, 'AVAILABLE'), (3, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(3, 'B', 1, 'B1', 1, 'AVAILABLE'), (3, 'B', 2, 'B2', 1, 'AVAILABLE'), (3, 'B', 3, 'B3', 1, 'AVAILABLE'), (3, 'B', 4, 'B4', 1, 'AVAILABLE'), (3, 'B', 5, 'B5', 1, 'AVAILABLE'), (3, 'B', 6, 'B6', 1, 'AVAILABLE'), (3, 'B', 7, 'B7', 1, 'AVAILABLE'), (3, 'B', 8, 'B8', 1, 'AVAILABLE'), (3, 'B', 9, 'B9', 1, 'AVAILABLE'), (3, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(3, 'C', 1, 'C1', 2, 'AVAILABLE'), (3, 'C', 2, 'C2', 2, 'AVAILABLE'), (3, 'C', 3, 'C3', 2, 'AVAILABLE'), (3, 'C', 4, 'C4', 2, 'AVAILABLE'), (3, 'C', 5, 'C5', 2, 'AVAILABLE'), (3, 'C', 6, 'C6', 2, 'AVAILABLE'), (3, 'C', 7, 'C7', 2, 'AVAILABLE'), (3, 'C', 8, 'C8', 2, 'AVAILABLE'), (3, 'C', 9, 'C9', 2, 'AVAILABLE'), (3, 'C', 10, 'C10', 2, 'AVAILABLE'),
+(3, 'D', 1, 'D1', 2, 'AVAILABLE'), (3, 'D', 2, 'D2', 2, 'AVAILABLE'), (3, 'D', 3, 'D3', 2, 'AVAILABLE'), (3, 'D', 4, 'D4', 2, 'AVAILABLE'), (3, 'D', 5, 'D5', 2, 'AVAILABLE'), (3, 'D', 6, 'D6', 2, 'AVAILABLE'), (3, 'D', 7, 'D7', 2, 'AVAILABLE'), (3, 'D', 8, 'D8', 2, 'AVAILABLE'), (3, 'D', 9, 'D9', 2, 'AVAILABLE'), (3, 'D', 10, 'D10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- Room 4 (40 ghế: A1-D10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(4, 'A', 1, 'A1', 1, 'AVAILABLE'), (4, 'A', 2, 'A2', 1, 'AVAILABLE'), (4, 'A', 3, 'A3', 1, 'AVAILABLE'), (4, 'A', 4, 'A4', 1, 'AVAILABLE'), (4, 'A', 5, 'A5', 1, 'AVAILABLE'), (4, 'A', 6, 'A6', 1, 'AVAILABLE'), (4, 'A', 7, 'A7', 1, 'AVAILABLE'), (4, 'A', 8, 'A8', 1, 'AVAILABLE'), (4, 'A', 9, 'A9', 1, 'AVAILABLE'), (4, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(4, 'B', 1, 'B1', 1, 'AVAILABLE'), (4, 'B', 2, 'B2', 1, 'AVAILABLE'), (4, 'B', 3, 'B3', 1, 'AVAILABLE'), (4, 'B', 4, 'B4', 1, 'AVAILABLE'), (4, 'B', 5, 'B5', 1, 'AVAILABLE'), (4, 'B', 6, 'B6', 1, 'AVAILABLE'), (4, 'B', 7, 'B7', 1, 'AVAILABLE'), (4, 'B', 8, 'B8', 1, 'AVAILABLE'), (4, 'B', 9, 'B9', 1, 'AVAILABLE'), (4, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(4, 'C', 1, 'C1', 2, 'AVAILABLE'), (4, 'C', 2, 'C2', 2, 'AVAILABLE'), (4, 'C', 3, 'C3', 2, 'AVAILABLE'), (4, 'C', 4, 'C4', 2, 'AVAILABLE'), (4, 'C', 5, 'C5', 2, 'AVAILABLE'), (4, 'C', 6, 'C6', 2, 'AVAILABLE'), (4, 'C', 7, 'C7', 2, 'AVAILABLE'), (4, 'C', 8, 'C8', 2, 'AVAILABLE'), (4, 'C', 9, 'C9', 2, 'AVAILABLE'), (4, 'C', 10, 'C10', 2, 'AVAILABLE'),
+(4, 'D', 1, 'D1', 2, 'AVAILABLE'), (4, 'D', 2, 'D2', 2, 'AVAILABLE'), (4, 'D', 3, 'D3', 2, 'AVAILABLE'), (4, 'D', 4, 'D4', 2, 'AVAILABLE'), (4, 'D', 5, 'D5', 2, 'AVAILABLE'), (4, 'D', 6, 'D6', 2, 'AVAILABLE'), (4, 'D', 7, 'D7', 2, 'AVAILABLE'), (4, 'D', 8, 'D8', 2, 'AVAILABLE'), (4, 'D', 9, 'D9', 2, 'AVAILABLE'), (4, 'D', 10, 'D10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- Room 5 (40 ghế: A1-D10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(5, 'A', 1, 'A1', 1, 'AVAILABLE'), (5, 'A', 2, 'A2', 1, 'AVAILABLE'), (5, 'A', 3, 'A3', 1, 'AVAILABLE'), (5, 'A', 4, 'A4', 1, 'AVAILABLE'), (5, 'A', 5, 'A5', 1, 'AVAILABLE'), (5, 'A', 6, 'A6', 1, 'AVAILABLE'), (5, 'A', 7, 'A7', 1, 'AVAILABLE'), (5, 'A', 8, 'A8', 1, 'AVAILABLE'), (5, 'A', 9, 'A9', 1, 'AVAILABLE'), (5, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(5, 'B', 1, 'B1', 1, 'AVAILABLE'), (5, 'B', 2, 'B2', 1, 'AVAILABLE'), (5, 'B', 3, 'B3', 1, 'AVAILABLE'), (5, 'B', 4, 'B4', 1, 'AVAILABLE'), (5, 'B', 5, 'B5', 1, 'AVAILABLE'), (5, 'B', 6, 'B6', 1, 'AVAILABLE'), (5, 'B', 7, 'B7', 1, 'AVAILABLE'), (5, 'B', 8, 'B8', 1, 'AVAILABLE'), (5, 'B', 9, 'B9', 1, 'AVAILABLE'), (5, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(5, 'C', 1, 'C1', 2, 'AVAILABLE'), (5, 'C', 2, 'C2', 2, 'AVAILABLE'), (5, 'C', 3, 'C3', 2, 'AVAILABLE'), (5, 'C', 4, 'C4', 2, 'AVAILABLE'), (5, 'C', 5, 'C5', 2, 'AVAILABLE'), (5, 'C', 6, 'C6', 2, 'AVAILABLE'), (5, 'C', 7, 'C7', 2, 'AVAILABLE'), (5, 'C', 8, 'C8', 2, 'AVAILABLE'), (5, 'C', 9, 'C9', 2, 'AVAILABLE'), (5, 'C', 10, 'C10', 2, 'AVAILABLE'),
+(5, 'D', 1, 'D1', 2, 'AVAILABLE'), (5, 'D', 2, 'D2', 2, 'AVAILABLE'), (5, 'D', 3, 'D3', 2, 'AVAILABLE'), (5, 'D', 4, 'D4', 2, 'AVAILABLE'), (5, 'D', 5, 'D5', 2, 'AVAILABLE'), (5, 'D', 6, 'D6', 2, 'AVAILABLE'), (5, 'D', 7, 'D7', 2, 'AVAILABLE'), (5, 'D', 8, 'D8', 2, 'AVAILABLE'), (5, 'D', 9, 'D9', 2, 'AVAILABLE'), (5, 'D', 10, 'D10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- Room 6 (30 ghế: A1-C10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(6, 'A', 1, 'A1', 1, 'AVAILABLE'), (6, 'A', 2, 'A2', 1, 'AVAILABLE'), (6, 'A', 3, 'A3', 1, 'AVAILABLE'), (6, 'A', 4, 'A4', 1, 'AVAILABLE'), (6, 'A', 5, 'A5', 1, 'AVAILABLE'), (6, 'A', 6, 'A6', 1, 'AVAILABLE'), (6, 'A', 7, 'A7', 1, 'AVAILABLE'), (6, 'A', 8, 'A8', 1, 'AVAILABLE'), (6, 'A', 9, 'A9', 1, 'AVAILABLE'), (6, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(6, 'B', 1, 'B1', 1, 'AVAILABLE'), (6, 'B', 2, 'B2', 1, 'AVAILABLE'), (6, 'B', 3, 'B3', 1, 'AVAILABLE'), (6, 'B', 4, 'B4', 1, 'AVAILABLE'), (6, 'B', 5, 'B5', 1, 'AVAILABLE'), (6, 'B', 6, 'B6', 1, 'AVAILABLE'), (6, 'B', 7, 'B7', 1, 'AVAILABLE'), (6, 'B', 8, 'B8', 1, 'AVAILABLE'), (6, 'B', 9, 'B9', 1, 'AVAILABLE'), (6, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(6, 'C', 1, 'C1', 2, 'AVAILABLE'), (6, 'C', 2, 'C2', 2, 'AVAILABLE'), (6, 'C', 3, 'C3', 2, 'AVAILABLE'), (6, 'C', 4, 'C4', 2, 'AVAILABLE'), (6, 'C', 5, 'C5', 2, 'AVAILABLE'), (6, 'C', 6, 'C6', 2, 'AVAILABLE'), (6, 'C', 7, 'C7', 2, 'AVAILABLE'), (6, 'C', 8, 'C8', 2, 'AVAILABLE'), (6, 'C', 9, 'C9', 2, 'AVAILABLE'), (6, 'C', 10, 'C10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- Room 7 (30 ghế: A1-C10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(7, 'A', 1, 'A1', 1, 'AVAILABLE'), (7, 'A', 2, 'A2', 1, 'AVAILABLE'), (7, 'A', 3, 'A3', 1, 'AVAILABLE'), (7, 'A', 4, 'A4', 1, 'AVAILABLE'), (7, 'A', 5, 'A5', 1, 'AVAILABLE'), (7, 'A', 6, 'A6', 1, 'AVAILABLE'), (7, 'A', 7, 'A7', 1, 'AVAILABLE'), (7, 'A', 8, 'A8', 1, 'AVAILABLE'), (7, 'A', 9, 'A9', 1, 'AVAILABLE'), (7, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(7, 'B', 1, 'B1', 1, 'AVAILABLE'), (7, 'B', 2, 'B2', 1, 'AVAILABLE'), (7, 'B', 3, 'B3', 1, 'AVAILABLE'), (7, 'B', 4, 'B4', 1, 'AVAILABLE'), (7, 'B', 5, 'B5', 1, 'AVAILABLE'), (7, 'B', 6, 'B6', 1, 'AVAILABLE'), (7, 'B', 7, 'B7', 1, 'AVAILABLE'), (7, 'B', 8, 'B8', 1, 'AVAILABLE'), (7, 'B', 9, 'B9', 1, 'AVAILABLE'), (7, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(7, 'C', 1, 'C1', 2, 'AVAILABLE'), (7, 'C', 2, 'C2', 2, 'AVAILABLE'), (7, 'C', 3, 'C3', 2, 'AVAILABLE'), (7, 'C', 4, 'C4', 2, 'AVAILABLE'), (7, 'C', 5, 'C5', 2, 'AVAILABLE'), (7, 'C', 6, 'C6', 2, 'AVAILABLE'), (7, 'C', 7, 'C7', 2, 'AVAILABLE'), (7, 'C', 8, 'C8', 2, 'AVAILABLE'), (7, 'C', 9, 'C9', 2, 'AVAILABLE'), (7, 'C', 10, 'C10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- Room 8 (30 ghế: A1-C10)
+INSERT INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id, status) VALUES
+(8, 'A', 1, 'A1', 1, 'AVAILABLE'), (8, 'A', 2, 'A2', 1, 'AVAILABLE'), (8, 'A', 3, 'A3', 1, 'AVAILABLE'), (8, 'A', 4, 'A4', 1, 'AVAILABLE'), (8, 'A', 5, 'A5', 1, 'AVAILABLE'), (8, 'A', 6, 'A6', 1, 'AVAILABLE'), (8, 'A', 7, 'A7', 1, 'AVAILABLE'), (8, 'A', 8, 'A8', 1, 'AVAILABLE'), (8, 'A', 9, 'A9', 1, 'AVAILABLE'), (8, 'A', 10, 'A10', 1, 'AVAILABLE'),
+(8, 'B', 1, 'B1', 1, 'AVAILABLE'), (8, 'B', 2, 'B2', 1, 'AVAILABLE'), (8, 'B', 3, 'B3', 1, 'AVAILABLE'), (8, 'B', 4, 'B4', 1, 'AVAILABLE'), (8, 'B', 5, 'B5', 1, 'AVAILABLE'), (8, 'B', 6, 'B6', 1, 'AVAILABLE'), (8, 'B', 7, 'B7', 1, 'AVAILABLE'), (8, 'B', 8, 'B8', 1, 'AVAILABLE'), (8, 'B', 9, 'B9', 1, 'AVAILABLE'), (8, 'B', 10, 'B10', 1, 'AVAILABLE'),
+(8, 'C', 1, 'C1', 2, 'AVAILABLE'), (8, 'C', 2, 'C2', 2, 'AVAILABLE'), (8, 'C', 3, 'C3', 2, 'AVAILABLE'), (8, 'C', 4, 'C4', 2, 'AVAILABLE'), (8, 'C', 5, 'C5', 2, 'AVAILABLE'), (8, 'C', 6, 'C6', 2, 'AVAILABLE'), (8, 'C', 7, 'C7', 2, 'AVAILABLE'), (8, 'C', 8, 'C8', 2, 'AVAILABLE'), (8, 'C', 9, 'C9', 2, 'AVAILABLE'), (8, 'C', 10, 'C10', 2, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+-- 15.8. Movies
+INSERT INTO movies (movie_id, title, description, duration, director, cast_members, trailer_url, rating, release_date, age_rating, poster_url, status) VALUES
+(1, 'Dune: Part Two', 'Hành trình huyền thoại của Paul Atreides khi anh hợp nhất với Chani...', 166, 'Denis Villeneuve', 'Timothée Chalamet, Zendaya', 'https://www.youtube.com/watch?v=Way9Dexny3w', 8.5, '2024-03-01', 'T16', 'https://image.tmdb.org/t/p/original/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg', 'NOW_SHOWING'),
+(2, 'Oppenheimer', 'Câu chuyện kịch tính về cuộc đời J. Robert Oppenheimer...', 180, 'Christopher Nolan', 'Cillian Murphy, Emily Blunt', 'https://www.youtube.com/watch?v=uYPbbksJxIg', 8.9, '2023-07-21', 'T18', 'https://image.tmdb.org/t/p/original/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg', 'NOW_SHOWING'),
+(3, 'Deadpool & Wolverine', 'Wade Wilson tái xuất giang hồ...', 128, 'Shawn Levy', 'Ryan Reynolds, Hugh Jackman', 'https://www.youtube.com/watch?v=73_1biulkYk', 7.8, '2024-07-26', 'T18', 'https://image.tmdb.org/t/p/original/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg', 'NOW_SHOWING'),
+(4, 'Inside Out 2', 'Khi cô bé Riley bước vào tuổi dậy thì...', 96, 'Kelsey Mann', 'Amy Poehler, Maya Hawke', 'https://www.youtube.com/watch?v=mg50EkStx-s', 7.9, '2024-06-14', 'P', 'https://image.tmdb.org/t/p/original/vpnVM9B6NMmQpWeZvzLvDESb2QY.jpg', 'NOW_SHOWING')
+ON DUPLICATE KEY UPDATE title = VALUES(title);
+
+-- Map Thể loại
+INSERT INTO movie_genres (movie_id, genre_id) VALUES
+(1, 1), (1, 2), (2, 3), (2, 4), (3, 6), (3, 7), (4, 11), (4, 12)
+ON DUPLICATE KEY UPDATE genre_id = VALUES(genre_id);
+
+-- 15.9. Showtimes
+INSERT INTO showtimes (showtime_id, movie_id, room_id, start_time, end_time, base_price, status) VALUES
+(1, 1, 1, '2026-10-15 18:30:00', '2026-10-15 21:26:00', 120000.00, 'SCHEDULED'),
+(2, 4, 2, '2026-10-15 19:00:00', '2026-10-15 20:46:00', 100000.00, 'SCHEDULED'),
+(3, 3, 3, '2026-10-15 20:00:00', '2026-10-15 22:18:00', 110000.00, 'SCHEDULED'),
+(4, 1, 1, '2026-10-16 14:00:00', '2026-10-16 16:56:00', 100000.00, 'SCHEDULED')
+ON DUPLICATE KEY UPDATE base_price = VALUES(base_price);
+
+-- 15.10. Showtime Seats (Khởi tạo toàn bộ ở trạng thái AVAILABLE)
+INSERT INTO showtime_seats (showtime_id, seat_id, room_id, booking_id, seat_status) VALUES
+(1, 1, 1, NULL, 'AVAILABLE'),
+(1, 2, 1, NULL, 'AVAILABLE'),
+(1, 3, 1, NULL, 'AVAILABLE'),
+(1, 4, 1, NULL, 'AVAILABLE')
+ON DUPLICATE KEY UPDATE seat_status = VALUES(seat_status);
+
 INSERT INTO schema_metadata (version) VALUES (2) ON DUPLICATE KEY UPDATE version = 2;

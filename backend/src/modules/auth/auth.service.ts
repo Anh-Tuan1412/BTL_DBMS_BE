@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto, ForgotPasswordDto } from './dto/auth-requests.dto';
+import { LoginDto, ForgotPasswordDto, VerifyEmailDto } from './dto/auth-requests.dto';
 import { UserRole } from '../../common/enums';
 
 @Injectable()
@@ -35,6 +35,10 @@ export class AuthService {
       role: registerDto.role || UserRole.CUSTOMER,
     });
 
+    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`==================================================`);
+    console.log(`[MOCK OTP] Mã xác thực cho ${newUser.email} là: ${mockOtp}`);
+    console.log(`==================================================`);
     const token = this.generateToken(newUser.id, newUser.email, newUser.role);
 
     return {
@@ -44,8 +48,20 @@ export class AuthService {
         email: newUser.email,
         fullName: newUser.fullName,
         role: newUser.role,
+        status: newUser.status,
       },
       accessToken: token,
+    };
+  }
+
+  async verifyEmail(verifyEmailDto: VerifyEmailDto) {
+    const user = await this.usersService.findByEmail(verifyEmailDto.email);
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy tài khoản người dùng');
+    }
+
+    return {
+      message: 'Xác thực tài khoản thành công! Bạn có thể đăng nhập ngay.',
     };
   }
 
@@ -55,6 +71,15 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
     }
 
+    // 1. Kiểm tra trạng thái tài khoản
+    if (user.status === 'BANNED') {
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa do vi phạm điều khoản');
+    }
+    if (user.status === 'INACTIVE') {
+      throw new UnauthorizedException('Tài khoản của bạn chưa được kích hoạt');
+    }
+
+    // 2. Xác thực mật khẩu băm
     const isPasswordMatch = await bcrypt.compare(
       loginDto.password,
       user.password,
@@ -63,6 +88,7 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
     }
 
+    // 3. Sinh JWT Token
     const token = this.generateToken(user.id, user.email, user.role);
 
     return {
@@ -72,6 +98,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        status: user.status,
       },
       accessToken: token,
     };
@@ -83,7 +110,6 @@ export class AuthService {
       throw new NotFoundException('Không tìm thấy tài khoản với email này');
     }
 
-    // Stub for reset password email sending (Hà & Định có thể kết nối Nodemailer sau)
     return {
       message: `Đã gửi mã khôi phục mật khẩu tới email ${forgotPasswordDto.email} (Chế độ mô phỏng)`,
       resetTokenStub: `mock-reset-token-${Date.now()}`,

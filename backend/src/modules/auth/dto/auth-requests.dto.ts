@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
@@ -23,4 +23,19 @@ export class ForgotPasswordDto {
   @IsEmail({}, { message: 'Email không đúng định dạng' })
   @IsNotEmpty({ message: 'Email không được để trống' })
   email: string;
+}
+
+export class VerifyEmailDto {
+  @ApiProperty({
+    example: 'customer@example.com',
+    description: 'Email cần xác thực',
+  })
+  @IsEmail({}, { message: 'Email không đúng định dạng' })
+  @IsNotEmpty({ message: 'Email không được để trống' })
+  email: string;
+
+  @ApiProperty({ example: '123456', description: 'Mã xác thực OTP' })
+  @IsString()
+  @IsOptional()
+  otp?: string;
 }
