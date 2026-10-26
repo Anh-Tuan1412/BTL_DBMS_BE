@@ -41,15 +41,13 @@ describe('BookingsService hold lifecycle', () => {
       source,
       bookings,
       {
-        findOneBy: jest
-          .fn()
-          .mockResolvedValue({
-            id: 1,
-            roomId: 2,
-            basePrice: 100000,
-            status: ShowtimeStatus.SCHEDULED,
-            startTime: new Date(Date.now() + 7200000),
-          }),
+        findOneBy: jest.fn().mockResolvedValue({
+          id: 1,
+          roomId: 2,
+          basePrice: 100000,
+          status: ShowtimeStatus.SCHEDULED,
+          startTime: new Date(Date.now() + 7200000),
+        }),
       } as any,
       {
         find: jest
@@ -58,6 +56,7 @@ describe('BookingsService hold lifecycle', () => {
             { id: 5, seatType: { priceCoefficient: '1.5' } },
           ]),
       } as any,
+      {} as any,
     );
     dto = { showtimeId: 1, seatIds: [5], holdTokens: { '5': token } };
   });

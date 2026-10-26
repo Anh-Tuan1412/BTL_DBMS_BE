@@ -1,3 +1,4 @@
+import { StripePaymentsService } from './stripe-payments.service';
 import {
   Injectable,
   BadRequestException,
@@ -40,6 +41,7 @@ export class BookingsService {
     @InjectRepository(Showtime)
     private readonly showtimeRepository: Repository<Showtime>,
     @InjectRepository(Seat) private readonly seatRepository: Repository<Seat>,
+    private readonly stripePayments: StripePaymentsService,
   ) {}
 
   private async getShowtime(id: number) {
@@ -260,6 +262,13 @@ export class BookingsService {
   }
 
   async mockStripePayment(userId: number, dto: MockStripePaymentDto) {
+    if (
+      process.env.ALLOW_MOCK_PAYMENTS !== 'true' ||
+      process.env.NODE_ENV !== 'test'
+    )
+      throw new BadRequestException(
+        'Thanh toán mock đã tắt. Vui lòng thanh toán qua Stripe',
+      );
     const initial = await this.bookingRepository.findOneBy({
       bookingCode: dto.bookingCode,
       userId,
@@ -341,6 +350,11 @@ export class BookingsService {
   }
 
   async cancelAndRefund(bookingCode: string, userId: number) {
+    if (
+      process.env.ALLOW_MOCK_PAYMENTS !== 'true' ||
+      process.env.NODE_ENV !== 'test'
+    )
+      return this.stripePayments.cancelAndRefund(bookingCode, userId);
     const initial = await this.bookingRepository.findOneBy({
       bookingCode,
       userId,

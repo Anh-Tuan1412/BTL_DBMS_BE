@@ -27,3 +27,7 @@ Thumbs.db
 .env
 .env.production
 !.env.example
+
+# Generated Stripe sandbox test artifacts
+/test/stripe-checkout-ui*.json
+/test/stripe-sandbox-result.json

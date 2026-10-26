@@ -85,3 +85,9 @@ export class MockStripePaymentDto {
   @IsString()
   stripeToken?: string;
 }
+
+export class StripeBookingDto {
+  @ApiProperty({ description: 'Mã đơn đặt vé' })
+  @IsString()
+  bookingCode: string;
+}

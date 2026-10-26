@@ -1,3 +1,5 @@
+import { StripeGateway } from './stripe.gateway';
+import { StripePaymentsService } from './stripe-payments.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Booking } from '../../database/entities/booking.entity';
@@ -10,7 +12,7 @@ import { BookingsController } from './bookings.controller';
 @Module({
   imports: [TypeOrmModule.forFeature([Booking, Ticket, Showtime, Seat])],
   controllers: [BookingsController],
-  providers: [BookingsService],
-  exports: [BookingsService],
+  providers: [BookingsService, StripeGateway, StripePaymentsService],
+  exports: [BookingsService, StripePaymentsService],
 })
 export class BookingsModule {}
