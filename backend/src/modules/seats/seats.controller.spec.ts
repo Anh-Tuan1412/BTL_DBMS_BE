@@ -7,7 +7,13 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { OptionalJwtAuthGuard } from '../../common/guards';
 import { TransformResponseInterceptor } from '../../common/interceptors/transform-response.interceptor';
-import { Seat, Showtime, Ticket } from '../../database/entities';
+import {
+  Seat,
+  Showtime,
+  Ticket,
+  CinemaRoom,
+  SeatTypeEntity,
+} from '../../database/entities';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import { RedisService } from '../redis/redis.service';
 import { UsersService } from '../users/users.service';
@@ -76,6 +82,8 @@ describe('UC6 seat map with optional JWT', () => {
           useValue: { findOneBy: async () => ({ id: 1, roomId: 1 }) },
         },
         { provide: getRepositoryToken(Ticket), useValue: {} },
+        { provide: getRepositoryToken(CinemaRoom), useValue: {} },
+        { provide: getRepositoryToken(SeatTypeEntity), useValue: {} },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -88,7 +96,7 @@ describe('UC6 seat map with optional JWT', () => {
     heldSeats.mockResolvedValue([{ seatId: 1, userId: 7, ttl: 180 }]),
   );
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
 
   it('lets guests see statuses without revealing ownership or hold tokens', async () => {
