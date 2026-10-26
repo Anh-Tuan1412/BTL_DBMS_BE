@@ -10,14 +10,14 @@ import {
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ShowtimesService } from './showtimes.service';
-import { CreateShowtimeDto, UpdateShowtimeDto } from './dto/showtime.dto';
+import {
+  CreateShowtimeDto,
+  UpdateShowtimeDto,
+  CheckConflictDto,
+  QueryShowtimeDto,
+} from './dto/showtime.dto';
 import { Public, Roles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import { UserRole } from '../../common/enums';
@@ -29,17 +29,36 @@ export class ShowtimesController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách tất cả các suất chiếu' })
-  @ApiQuery({
-    name: 'movieId',
-    required: false,
-    description: 'Lọc theo ID phim',
+  @ApiOperation({
+    summary: 'Lấy danh sách các suất chiếu (hỗ trợ lọc theo phim, phòng, rạp, ngày, trạng thái)',
   })
-  findAll(@Query('movieId') movieId?: string) {
-    if (movieId) {
-      return this.showtimesService.findByMovie(Number(movieId));
-    }
-    return this.showtimesService.findAll();
+  findAll(@Query() query: QueryShowtimeDto) {
+    return this.showtimesService.findAll(query);
+  }
+
+  @Public()
+  @Get('movie/:movieId')
+  @ApiOperation({ summary: 'Lấy danh sách suất chiếu của một phim' })
+  findByMovie(@Param('movieId', ParseIntPipe) movieId: number) {
+    return this.showtimesService.findByMovie(movieId);
+  }
+
+  @Public()
+  @Get('room/:roomId')
+  @ApiOperation({ summary: 'Lấy danh sách suất chiếu của một phòng chiếu' })
+  findByRoom(@Param('roomId', ParseIntPipe) roomId: number) {
+    return this.showtimesService.findByRoom(roomId);
+  }
+
+  @Public()
+  @Post('check-conflict')
+  @ApiOperation({
+    summary: 'UC4: Kiểm tra xung đột lịch chiếu trong phòng chiếu',
+    description:
+      'Kiểm tra xem khung giờ dự kiến có bị trùng với suất chiếu khác hoặc thời gian dọn phòng (cleanup_minutes) trong cùng phòng hay không.',
+  })
+  checkConflict(@Body() dto: CheckConflictDto) {
+    return this.showtimesService.checkConflict(dto);
   }
 
   @Public()
@@ -62,7 +81,7 @@ export class ShowtimesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Patch(':id')
-  @ApiOperation({ summary: 'Cập nhật suất chiếu chưa có booking' })
+  @ApiOperation({ summary: 'Cập nhật suất chiếu chưa có booking (Chỉ dành cho ADMIN)' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateShowtimeDto,
@@ -74,8 +93,9 @@ export class ShowtimesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Delete(':id')
-  @ApiOperation({ summary: 'Xóa suất chiếu (Chỉ dành cho ADMIN)' })
+  @ApiOperation({ summary: 'Hủy suất chiếu (Chỉ dành cho ADMIN)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.showtimesService.remove(id);
   }
 }
+
