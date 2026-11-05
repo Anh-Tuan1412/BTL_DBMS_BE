@@ -457,7 +457,7 @@ export class BookingsService implements OnModuleInit, OnModuleDestroy {
           status: PaymentStatus.PAID,
         });
         if (payment) {
-          if (!payment.transactionCode?.startsWith('mock_'))
+          if (!payment.transactionCode?.startsWith('mock_') && !payment.transactionCode?.startsWith('TX-'))
             throw new ConflictException(
               'Cần tích hợp Stripe Refund API để hoàn khoản thanh toán thực',
             );
