@@ -392,13 +392,21 @@ export class BookingsService {
       const payments = await manager.find(Payment, {
         where: { bookingId: booking.id, status: PaymentStatus.PAID },
       });
-      for (const payment of payments)
+      for (const payment of payments) {
+        if (
+          !payment.transactionCode?.startsWith('mock_') &&
+          !payment.transactionCode?.startsWith('TX-')
+        )
+          throw new ConflictException(
+            'Cần tích hợp Stripe Refund API để hoàn khoản thanh toán thực',
+          );
         await manager.update(Payment, payment.id, {
           status: PaymentStatus.REFUNDED,
           refundAmount: payment.amount,
           refundedAt: new Date(),
           refundId: `mock_refund_${randomUUID()}`,
         });
+      }
     });
     return {
       success: true,

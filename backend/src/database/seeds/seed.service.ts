@@ -9,9 +9,13 @@ import {
   Seat,
   SeatTypeEntity,
   Genre,
+  Booking,
+  Ticket,
+  Payment,
+  Showtime,
 } from '../entities';
 import { ShowtimesService } from '../../modules/showtimes/showtimes.service';
-import { UserRole, SeatType, MovieStatus } from '../../common/enums';
+import { UserRole, SeatType, MovieStatus, BookingStatus, PaymentStatus } from '../../common/enums';
 
 @Injectable()
 export class SeedService {
@@ -210,6 +214,127 @@ export class SeedService {
           basePrice: 100000,
         });
         this.logger.log('-> Đã tạo suất chiếu mẫu cho ngày mai');
+      }
+    }
+
+    
+    // 5. Tao ve mau cho Khach hang (UC-09 & UC-10 Demo Data)
+    const bookingRepo = this.dataSource.getRepository(Booking);
+    const ticketRepo = this.dataSource.getRepository(Ticket);
+    const paymentRepo = this.dataSource.getRepository(Payment);
+
+    const customerUser = await userRepo.findOne({
+      where: { email: 'customer@gmail.com' },
+    });
+    const showtime = await this.dataSource.getRepository(Showtime).findOne({
+      where: {},
+      order: { id: 'DESC' },
+    });
+
+    if (customerUser && showtime) {
+      const existingBooking = await bookingRepo.findOne({
+        where: { userId: customerUser.id },
+      });
+
+      if (!existingBooking) {
+        const seatA1 = await seatRepo.findOne({
+          where: { roomId: showtime.roomId, seatNumber: 'A1' },
+        });
+        const seatA2 = await seatRepo.findOne({
+          where: { roomId: showtime.roomId, seatNumber: 'A2' },
+        });
+
+        if (seatA1 && seatA2) {
+          // Booking 1: Hop le (CONFIRMED) - Suat chieu ngay mai (Du dieu kien huy truoc 60 phut)
+          const b1 = await bookingRepo.save(
+            bookingRepo.create({
+              bookingCode: `BK-${Date.now().toString().slice(-6)}-A1A2`,
+              userId: customerUser.id,
+              showtimeId: showtime.id,
+              totalAmount: 200000,
+              discountAmount: 0,
+              status: BookingStatus.CONFIRMED,
+            }),
+          );
+
+          await ticketRepo.save([
+            ticketRepo.create({
+              ticketCode: `TK-${Date.now().toString().slice(-5)}-01`,
+              holdToken: 'seed-token-1',
+              bookingId: b1.id,
+              showtimeId: showtime.id,
+              seatId: seatA1.id,
+              price: 100000,
+              status: 'VALID',
+            }),
+            ticketRepo.create({
+              ticketCode: `TK-${Date.now().toString().slice(-5)}-02`,
+              holdToken: 'seed-token-2',
+              bookingId: b1.id,
+              showtimeId: showtime.id,
+              seatId: seatA2.id,
+              price: 100000,
+              status: 'VALID',
+            }),
+          ]);
+
+          await paymentRepo.save(
+            paymentRepo.create({
+              bookingId: b1.id,
+              method: 'STRIPE',
+              transactionCode: `mock_stripe_${Date.now().toString().slice(-8)}`,
+              amount: 200000,
+              status: PaymentStatus.PAID,
+              paidAt: new Date(),
+            }),
+          );
+
+          // Booking 2: Da huy va hoan tien (CANCELLED & REFUNDED)
+          const seatB1 = await seatRepo.findOne({
+            where: { roomId: showtime.roomId, seatNumber: 'B1' },
+          });
+          if (seatB1) {
+            const b2 = await bookingRepo.save(
+              bookingRepo.create({
+                bookingCode: `BK-REFUNDED-B1`,
+                userId: customerUser.id,
+                showtimeId: showtime.id,
+                totalAmount: 100000,
+                discountAmount: 0,
+                status: BookingStatus.CANCELLED,
+                cancelledAt: new Date(Date.now() - 3600000),
+                cancellationReason: 'Khach hang ban dot xuat (Hoan tien tu dong 100%)',
+              }),
+            );
+
+            await ticketRepo.save(
+              ticketRepo.create({
+                ticketCode: `TK-REFUNDED-01`,
+                holdToken: 'seed-token-3',
+                bookingId: b2.id,
+                showtimeId: showtime.id,
+                seatId: seatB1.id,
+                price: 100000,
+                status: 'REFUNDED',
+              }),
+            );
+
+            await paymentRepo.save(
+              paymentRepo.create({
+                bookingId: b2.id,
+                method: 'STRIPE',
+                transactionCode: `TX-REFUNDED-01`,
+                amount: 100000,
+                status: PaymentStatus.REFUNDED,
+                refundAmount: 100000,
+                paidAt: new Date(Date.now() - 7200000),
+                refundedAt: new Date(Date.now() - 3600000),
+              }),
+            );
+          }
+
+          this.logger.log('-> Da tao 2 don ve mau cho customer@gmail.com (1 Ve hop le + 1 Ve da hoan tien)');
+        }
       }
     }
 
