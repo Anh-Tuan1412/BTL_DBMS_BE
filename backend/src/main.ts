@@ -6,12 +6,41 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 
+async function listenOnAvailablePort(app: any, basePort: number) {
+  const maxAttempts = 20;
+  let port = basePort;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      await app.listen(port);
+      return port;
+    } catch (error: any) {
+      if (error?.code !== 'EADDRINUSE') {
+        throw error;
+      }
+
+      const nextPort = basePort + attempt + 1;
+      if (attempt === maxAttempts - 1) {
+        throw error;
+      }
+
+      port = nextPort;
+      Logger.warn(
+        `Port ${basePort + attempt} đã bị chiếm, đang thử port ${nextPort}...`,
+      );
+    }
+  }
+
+  throw new Error(`Không tìm thấy cổng khả dụng từ ${basePort}`);
+}
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 3000);
+  const configuredPort = Number(configService.get<number>('PORT', 3000));
+  const port = Number.isFinite(configuredPort) ? configuredPort : 3000;
 
   // 1. Kích hoạt CORS cho Frontend (Next.js / React)
   app.enableCors({
@@ -75,13 +104,13 @@ async function bootstrap() {
     },
   });
 
-  await app.listen(port);
+  const runningPort = await listenOnAvailablePort(app, port);
   logger.log(`==========================================================`);
   logger.log(
-    `🚀 Server Backend NestJS đang chạy tại: http://localhost:${port}`,
+    `🚀 Server Backend NestJS đang chạy tại: http://localhost:${runningPort}`,
   );
   logger.log(
-    `📚 Swagger API Docs truy cập tại:     http://localhost:${port}/api/docs`,
+    `📚 Swagger API Docs truy cập tại:     http://localhost:${runningPort}/api/docs`,
   );
   logger.log(`==========================================================`);
 }

@@ -15,7 +15,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto, ForgotPasswordDto } from './dto/auth-requests.dto';
+import { LoginDto, ForgotPasswordDto, VerifyEmailDto } from './dto/auth-requests.dto';
 import { Public, CurrentUser } from '../../common/decorators';
 import { JwtAuthGuard } from '../../common/guards';
 import { User } from '../../database/entities/user.entity';
@@ -31,6 +31,15 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'Tài khoản được tạo thành công' })
   register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Xác thực email đăng ký bằng OTP' })
+  @ApiResponse({ status: 200, description: 'Xác thực thành công' })
+  verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto);
   }
 
   @Public()
