@@ -350,16 +350,20 @@ export class BookingsService {
   }
 
   async cancelAndRefund(bookingCode: string, userId: number) {
-    if (
-      process.env.ALLOW_MOCK_PAYMENTS !== 'true' ||
-      process.env.NODE_ENV !== 'test'
-    )
-      return this.stripePayments.cancelAndRefund(bookingCode, userId);
     const initial = await this.bookingRepository.findOneBy({
       bookingCode,
       userId,
     });
     if (!initial) throw new NotFoundException('Không tìm thấy đơn đặt vé');
+
+    const payment = await this.dataSource.getRepository(Payment).findOneBy({
+      bookingId: initial.id,
+      status: PaymentStatus.PAID,
+    });
+
+    if (payment?.stripePaymentIntentId) {
+      return this.stripePayments.cancelAndRefund(bookingCode, userId);
+    }
     await this.dataSource.transaction('READ COMMITTED', async (manager) => {
       const booking = await this.lockBooking(
         manager,
