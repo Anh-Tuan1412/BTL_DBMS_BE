@@ -2,7 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class OverviewSummaryDto {
-  @ApiProperty({ example: 485000000.0, description: 'Tổng doanh thu ròng (VND)' })
+  @ApiProperty({
+    example: 485000000.0,
+    description: 'Tổng doanh thu ròng (VND)',
+  })
   totalRevenue: number;
 
   @ApiProperty({ example: 5240, description: 'Tổng số vé bán ra thành công' })
@@ -28,8 +31,22 @@ export class TopMovieRevenueDto {
   @ApiProperty({ example: 2450, description: 'Tổng số vé bán được của phim' })
   totalTickets: number;
 
-  @ApiProperty({ example: 225000000.0, description: 'Tổng doanh thu phim mang lại (VND)' })
+  @ApiProperty({
+    example: 225000000.0,
+    description: 'Tổng doanh thu phim mang lại (VND)',
+  })
   totalRevenue: number;
+}
+
+export class DailyRevenueDto {
+  @ApiProperty({ example: '2026-11-12' })
+  date: string;
+
+  @ApiProperty()
+  bookingCount: number;
+
+  @ApiProperty()
+  revenue: number;
 }
 
 export class MonthlyRevenueDto {
@@ -39,7 +56,10 @@ export class MonthlyRevenueDto {
   @ApiProperty({ example: 835, description: 'Tổng số đơn booking trong tháng' })
   bookingCount: number;
 
-  @ApiProperty({ example: 168000000.0, description: 'Doanh thu trong tháng (VND)' })
+  @ApiProperty({
+    example: 168000000.0,
+    description: 'Doanh thu trong tháng (VND)',
+  })
   revenue: number;
 }
 
@@ -53,13 +73,19 @@ export class SeatOccupancyDto {
   @ApiProperty({ example: 'Cinema 1 (IMAX)', description: 'Tên phòng chiếu' })
   roomName: string;
 
-  @ApiProperty({ example: '2026-10-15T19:00:00.000Z', description: 'Thời gian bắt đầu suất chiếu' })
+  @ApiProperty({
+    example: '2026-10-15T19:00:00.000Z',
+    description: 'Thời gian bắt đầu suất chiếu',
+  })
   startTime: Date;
 
   @ApiProperty({ example: 48, description: 'Số ghế đã được đặt/bán' })
   bookedSeats: number;
 
-  @ApiProperty({ example: 50, description: 'Tổng sức chứa ghế của phòng chiếu' })
+  @ApiProperty({
+    example: 50,
+    description: 'Tổng sức chứa ghế của phòng chiếu',
+  })
   totalRoomSeats: number;
 
   @ApiProperty({ example: '96.00%', description: 'Tỷ lệ lấp đầy ghế (%)' })
@@ -77,7 +103,10 @@ export class ExplainQueryDto {
 }
 
 export class BenchmarkResponseDto {
-  @ApiProperty({ example: 'So sánh hiệu năng thực nghiệm giữa MySQL 8.0 (InnoDB) và Redis 7.x (In-Memory)' })
+  @ApiProperty({
+    example:
+      'So sánh hiệu năng thực nghiệm giữa MySQL 8.0 (InnoDB) và Redis 7.x (In-Memory)',
+  })
   benchmarkOverview: string;
 
   @ApiProperty({ example: 100 })

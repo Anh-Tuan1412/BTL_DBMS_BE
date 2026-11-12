@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Movie } from '../../database/entities/movie.entity';
@@ -12,15 +12,38 @@ export class SearchService {
   ) {}
 
   async searchMovies(filter: SearchMovieDto) {
+    if (
+      filter.minPrice !== undefined &&
+      filter.maxPrice !== undefined &&
+      filter.minPrice > filter.maxPrice
+    ) {
+      throw new BadRequestException(
+        'Giá tối thiểu phải nhỏ hơn hoặc bằng giá tối đa',
+      );
+    }
     const query = this.movieRepository
       .createQueryBuilder('movie')
       .leftJoinAndSelect('movie.genres', 'genre')
-      .leftJoinAndSelect('movie.showtimes', 'showtime')
+      .leftJoinAndSelect(
+        'movie.showtimes',
+        'showtime',
+        'showtime.status = :scheduled AND showtime.startTime > :now',
+        {
+          scheduled: 'SCHEDULED',
+          now: new Date(),
+        },
+      )
       .leftJoinAndSelect('showtime.room', 'room')
       .leftJoinAndSelect('room.cinema', 'cinema')
+      .where('movie.status IN (:...publicStatuses)', {
+        publicStatuses: ['NOW_SHOWING', 'COMING_SOON'],
+      })
       .distinct(true)
       .orderBy('movie.title', 'ASC')
       .addOrderBy('showtime.startTime', 'ASC');
+
+    if (filter.status)
+      query.andWhere('movie.status = :status', { status: filter.status });
 
     if (filter.keyword && filter.keyword.trim()) {
       const keyword = `%${filter.keyword.trim()}%`;

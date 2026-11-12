@@ -3,43 +3,63 @@ import {
   ConflictException,
   UnauthorizedException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto, ForgotPasswordDto, VerifyEmailDto } from './dto/auth-requests.dto';
+import {
+  LoginDto,
+  ForgotPasswordDto,
+  VerifyEmailDto,
+  ResetPasswordDto,
+} from './dto/auth-requests.dto';
 import { UserRole } from '../../common/enums';
+import { OtpService } from './otp.service';
+import { ConfigService } from '@nestjs/config';
+import { sessionCredential } from './session-credential';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly otp: OtpService,
+    private readonly config: ConfigService,
   ) {}
 
   async register(registerDto: RegisterDto) {
+    registerDto.email = registerDto.email.trim().toLowerCase();
     const existingUser = await this.usersService.findByEmail(registerDto.email);
     if (existingUser) {
       throw new ConflictException('Email này đã được đăng ký trong hệ thống');
     }
 
+    this.otp.delivery();
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(registerDto.password, salt);
 
-    const newUser = await this.usersService.create({
-      email: registerDto.email,
-      password: hashedPassword,
-      fullName: registerDto.fullName,
-      phoneNumber: registerDto.phoneNumber,
-      role: registerDto.role || UserRole.CUSTOMER,
-    });
-
-    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log(`==================================================`);
-    console.log(`[MOCK OTP] Mã xác thực cho ${newUser.email} là: ${mockOtp}`);
-    console.log(`==================================================`);
-    const token = this.generateToken(newUser.id, newUser.email, newUser.role);
+    let newUser;
+    try {
+      newUser = await this.usersService.create({
+        email: registerDto.email,
+        password: hashedPassword,
+        fullName: registerDto.fullName.trim(),
+        phoneNumber: registerDto.phoneNumber?.trim() || undefined,
+        role: UserRole.CUSTOMER,
+        status: 'INACTIVE',
+      });
+    } catch (error) {
+      if (
+        error?.code === 'ER_DUP_ENTRY' ||
+        error?.driverError?.code === 'ER_DUP_ENTRY'
+      ) {
+        throw new ConflictException('Email hoặc số điện thoại đã được sử dụng');
+      }
+      throw error;
+    }
+    await this.otp.issue(newUser.email, 'verify');
 
     return {
       message: 'Đăng ký tài khoản thành công',
@@ -50,7 +70,7 @@ export class AuthService {
         role: newUser.role,
         status: newUser.status,
       },
-      accessToken: token,
+      delivery: this.otp.delivery(),
     };
   }
 
@@ -59,6 +79,11 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('Không tìm thấy tài khoản người dùng');
     }
+
+    if (user.status !== 'INACTIVE')
+      throw new BadRequestException('Tài khoản không chờ xác thực');
+    await this.otp.consume(user.email, 'verify', verifyEmailDto.otp);
+    await this.usersService.update(user.id, { status: 'ACTIVE' });
 
     return {
       message: 'Xác thực tài khoản thành công! Bạn có thể đăng nhập ngay.',
@@ -73,7 +98,9 @@ export class AuthService {
 
     // 1. Kiểm tra trạng thái tài khoản
     if (user.status === 'BANNED') {
-      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa do vi phạm điều khoản');
+      throw new UnauthorizedException(
+        'Tài khoản của bạn đã bị khóa do vi phạm điều khoản',
+      );
     }
     if (user.status === 'INACTIVE') {
       throw new UnauthorizedException('Tài khoản của bạn chưa được kích hoạt');
@@ -89,7 +116,12 @@ export class AuthService {
     }
 
     // 3. Sinh JWT Token
-    const token = this.generateToken(user.id, user.email, user.role);
+    const token = this.generateToken(
+      user.id,
+      user.email,
+      user.role,
+      user.password,
+    );
 
     return {
       message: 'Đăng nhập thành công',
@@ -105,19 +137,59 @@ export class AuthService {
   }
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
-    const user = await this.usersService.findByEmail(forgotPasswordDto.email);
-    if (!user) {
-      throw new NotFoundException('Không tìm thấy tài khoản với email này');
-    }
-
+    const email = forgotPasswordDto.email.trim().toLowerCase();
+    const user = await this.usersService.findByEmail(email);
+    await this.otp.issue(email, 'reset', user?.status === 'ACTIVE');
     return {
-      message: `Đã gửi mã khôi phục mật khẩu tới email ${forgotPasswordDto.email} (Chế độ mô phỏng)`,
-      resetTokenStub: `mock-reset-token-${Date.now()}`,
+      message:
+        'Nếu email thuộc tài khoản hoạt động, mã khôi phục sẽ được gửi. Mã có hiệu lực 10 phút.',
+      delivery: this.otp.delivery(),
     };
   }
 
-  private generateToken(userId: number, email: string, role: UserRole): string {
-    const payload = { sub: userId, email, role };
+  async resendVerification(email: string) {
+    email = email.trim().toLowerCase();
+    const user = await this.usersService.findByEmail(email);
+    await this.otp.issue(email, 'verify', user?.status === 'INACTIVE');
+    return {
+      message: 'Nếu tài khoản đang chờ xác thực, mã mới sẽ được gửi.',
+      delivery: this.otp.delivery(),
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.usersService.findByEmail(
+      dto.email.trim().toLowerCase(),
+    );
+    if (!user || user.status !== 'ACTIVE')
+      throw new BadRequestException(
+        'Không thể đặt lại mật khẩu cho tài khoản này',
+      );
+    await this.otp.consume(user.email, 'reset', dto.otp);
+    await this.usersService.update(user.id, {
+      password: await bcrypt.hash(dto.newPassword, 10),
+    });
+    return { message: 'Đã đổi mật khẩu. Vui lòng đăng nhập lại.' };
+  }
+
+  private generateToken(
+    userId: number,
+    email: string,
+    role: UserRole,
+    passwordHash: string,
+  ): string {
+    const payload = {
+      sub: userId,
+      email,
+      role,
+      credential: sessionCredential(
+        passwordHash,
+        this.config.get<string>(
+          'JWT_SECRET',
+          'super_secret_jwt_key_movie_booking_2026',
+        ),
+      ),
+    };
     return this.jwtService.sign(payload);
   }
 }

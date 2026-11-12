@@ -31,6 +31,7 @@ import {
         password: configService.get<string>('DB_PASSWORD', 'movie_password'),
         database: configService.get<string>('DB_NAME', 'movie_ticket_db'),
         timezone: 'Z',
+        charset: 'utf8mb4',
         entities: [
           User,
           Movie,

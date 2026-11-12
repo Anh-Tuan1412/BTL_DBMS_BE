@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Body,
   Param,
   ParseIntPipe,
@@ -11,7 +12,11 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SeatsService } from './seats.service';
-import { CreateSeatDto, GenerateSeatsForRoomDto } from './dto/seat.dto';
+import {
+  CreateSeatDto,
+  GenerateSeatsForRoomDto,
+  UpdateSeatDto,
+} from './dto/seat.dto';
 import { Public, Roles, CurrentUser } from '../../common/decorators';
 import {
   JwtAuthGuard,
@@ -25,6 +30,12 @@ import { User } from '../../database/entities/user.entity';
 @Controller('seats')
 export class SeatsController {
   constructor(private readonly seatsService: SeatsService) {}
+
+  @Public()
+  @Get('types')
+  findTypes() {
+    return this.seatsService.findTypes();
+  }
 
   @Public()
   @Get('room/:roomId')
@@ -59,6 +70,20 @@ export class SeatsController {
   })
   createSeat(@Body() dto: CreateSeatDto) {
     return this.seatsService.createSeat(dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Cập nhật vị trí, mã và loại ghế trước khi mở lịch chiếu',
+  })
+  updateSeat(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSeatDto,
+  ) {
+    return this.seatsService.updateSeat(id, dto);
   }
 
   @ApiBearerAuth('JWT-auth')
