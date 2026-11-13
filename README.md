@@ -3,6 +3,7 @@
 > Hệ thống Đặt Vé Xem Phim Trực Tuyến áp dụng công nghệ **NestJS**, **MySQL** và **Redis**.
 
 Hướng dẫn chạy đồng bộ với frontend, cấu hình OTP/Stripe và kiểm thử: [INTEGRATION.md](INTEGRATION.md).
+[Hướng dẫn chạy và demo trên máy cá nhân](./LOCAL_DEMO.md)
 
 ## 👥 Nhóm Thực Hiện
 - **Quách Văn Hà** (MSSV: 2410858)
