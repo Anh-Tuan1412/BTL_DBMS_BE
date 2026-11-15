@@ -6,14 +6,18 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { Seat } from '../../database/entities/seat.entity';
 import { Showtime } from '../../database/entities/showtime.entity';
 import { Ticket } from '../../database/entities/ticket.entity';
 import { CinemaRoom } from '../../database/entities/cinema-room.entity';
 import { SeatTypeEntity } from '../../database/entities/seat-type.entity';
 import { RedisService } from '../redis/redis.service';
-import { CreateSeatDto, GenerateSeatsForRoomDto } from './dto/seat.dto';
+import {
+  CreateSeatDto,
+  GenerateSeatsForRoomDto,
+  UpdateSeatDto,
+} from './dto/seat.dto';
 import { SeatType } from '../../common/enums';
 
 @Injectable()
@@ -30,7 +34,99 @@ export class SeatsService {
     @InjectRepository(SeatTypeEntity)
     private readonly seatTypeRepository: Repository<SeatTypeEntity>,
     private readonly redisService: RedisService,
-  ) { }
+  ) {}
+
+  private async lockEditableRoom(manager: EntityManager, roomId: number) {
+    const room = await manager.findOne(CinemaRoom, {
+      where: { id: roomId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!room || room.status !== 'ACTIVE')
+      throw new BadRequestException('Phòng không tồn tại hoặc không khả dụng');
+    const upcoming = await manager
+      .createQueryBuilder(Showtime, 's')
+      .where(
+        's.roomId = :roomId AND s.status = :status AND s.startTime > :now',
+        { roomId, status: 'SCHEDULED', now: new Date() },
+      )
+      .getCount();
+    if (upcoming)
+      throw new ConflictException(
+        'Phòng đã mở lịch bán vé. Hãy hủy lịch trước khi thay đổi sơ đồ ghế.',
+      );
+  }
+
+  private async syncCapacity(manager: EntityManager, roomId: number) {
+    await manager.query(
+      "UPDATE rooms SET total_seats=(SELECT COUNT(*) FROM seats WHERE room_id=? AND status='AVAILABLE') WHERE room_id=?",
+      [roomId, roomId],
+    );
+  }
+
+  findTypes() {
+    return this.seatTypeRepository.find({
+      where: { status: 'ACTIVE' },
+      order: { id: 'ASC' },
+    });
+  }
+
+  async updateSeat(id: number, dto: UpdateSeatDto) {
+    const initial = await this.seatRepository.findOneBy({ id });
+    if (!initial) throw new NotFoundException('Không tìm thấy ghế');
+    return this.seatRepository.manager.transaction(async (manager) => {
+      // Showtime creation also locks the room. Do not change an inventory layout
+      // after it has been offered for sale, including seats held only in Redis.
+      await manager.findOneOrFail(CinemaRoom, {
+        where: { id: initial.roomId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const upcoming = await manager
+        .createQueryBuilder(Showtime, 's')
+        .where(
+          's.roomId = :roomId AND s.status = :status AND s.startTime > :now',
+          { roomId: initial.roomId, status: 'SCHEDULED', now: new Date() },
+        )
+        .getCount();
+      if (upcoming)
+        throw new ConflictException(
+          'Phòng đã có suất chiếu mở bán. Hãy hủy lịch trước khi chỉnh sửa sơ đồ ghế.',
+        );
+      if (await manager.count(Ticket, { where: { seatId: id } })) {
+        throw new ConflictException(
+          'Ghế đã có lịch sử vé. Không thể đổi vị trí hoặc loại ghế.',
+        );
+      }
+      const seat = await manager.findOneByOrFail(Seat, { id });
+      const row = dto.row ?? seat.row;
+      const column = dto.column ?? seat.column;
+      const label =
+        dto.seatNumber ??
+        (dto.row !== undefined || dto.column !== undefined
+          ? `${row}${column}`
+          : seat.seatNumber);
+      const conflict = await manager
+        .createQueryBuilder(Seat, 'seat')
+        .where(
+          'seat.roomId = :roomId AND seat.id <> :id AND ((seat.row = :row AND seat.column = :column) OR seat.seatNumber = :label)',
+          { roomId: seat.roomId, id, row, column, label },
+        )
+        .getCount();
+      if (conflict)
+        throw new ConflictException('Vị trí hoặc mã ghế đã tồn tại');
+      if (dto.type) {
+        const type = await manager.findOneBy(SeatTypeEntity, {
+          name: dto.type,
+          status: 'ACTIVE',
+        });
+        if (!type) throw new BadRequestException('Loại ghế không khả dụng');
+        seat.seatTypeId = type.id;
+        seat.seatType = type;
+      }
+      Object.assign(seat, { row, column, seatNumber: label });
+      await manager.save(Seat, seat);
+      return manager.findOneOrFail(Seat, { where: { id } });
+    });
+  }
 
   // =========================================================================
   // UC3: Đặng Minh Quang - Quản lý ghế ngồi
@@ -43,7 +139,8 @@ export class SeatsService {
    */
   async findByRoom(roomId: number) {
     const room = await this.roomRepository.findOneBy({ id: roomId });
-    if (!room) throw new NotFoundException(`Không tìm thấy phòng chiếu ID ${roomId}`);
+    if (!room)
+      throw new NotFoundException(`Không tìm thấy phòng chiếu ID ${roomId}`);
 
     const seats = await this.seatRepository.find({
       where: { roomId },
@@ -75,48 +172,62 @@ export class SeatsService {
    *  3. Tìm SeatTypeEntity theo tên enum (REGULAR / VIP / COUPLE).
    */
   async createSeat(dto: CreateSeatDto) {
-    // 1. Kiểm tra phòng hợp lệ
-    const room = await this.roomRepository.findOneBy({ id: dto.roomId });
-    if (!room || room.status !== 'ACTIVE')
-      throw new BadRequestException(`Phòng chiếu ID ${dto.roomId} không tồn tại hoặc không khả dụng`);
+    return this.seatRepository.manager.transaction(async (manager) => {
+      await this.lockEditableRoom(manager, dto.roomId);
+      const seatRepo = manager.getRepository(Seat);
+      const roomRepo = manager.getRepository(CinemaRoom);
+      const typeRepo = manager.getRepository(SeatTypeEntity);
 
-    // 2. Kiểm tra trùng vị trí (unique constraint: roomId + row + column)
-    const existing = await this.seatRepository.findOne({
-      where: { roomId: dto.roomId, row: dto.row, column: dto.column },
+      // 1. Kiểm tra phòng hợp lệ
+      const room = await roomRepo.findOneBy({ id: dto.roomId });
+      if (!room || room.status !== 'ACTIVE')
+        throw new BadRequestException(
+          `Phòng chiếu ID ${dto.roomId} không tồn tại hoặc không khả dụng`,
+        );
+
+      // 2. Kiểm tra trùng vị trí (unique constraint: roomId + row + column)
+      const existing = await seatRepo.findOne({
+        where: { roomId: dto.roomId, row: dto.row, column: dto.column },
+      });
+      if (existing)
+        throw new ConflictException(
+          `Vị trí ghế ${dto.row}${dto.column} đã tồn tại trong phòng này`,
+        );
+
+      // 3. Tìm SeatTypeEntity khớp với tên loại ghế
+      const seatType = await typeRepo.findOne({
+        where: { name: dto.type, status: 'ACTIVE' },
+      });
+      if (!seatType)
+        throw new BadRequestException(
+          `Loại ghế '${dto.type}' không tồn tại hoặc chưa được kích hoạt`,
+        );
+
+      // 4. Tạo và lưu ghế mới
+      const seat = seatRepo.create({
+        roomId: dto.roomId,
+        row: dto.row,
+        column: dto.column,
+        seatNumber: dto.seatNumber,
+        seatTypeId: seatType.id,
+        status: 'AVAILABLE',
+      });
+      const saved = await seatRepo.save(seat);
+
+      await this.syncCapacity(manager, dto.roomId);
+      return {
+        message: 'Tạo ghế thành công',
+        data: {
+          id: saved.id,
+          label: saved.seatNumber,
+          row: saved.row,
+          column: saved.column,
+          type: seatType.name,
+          priceCoefficient: Number(seatType.priceCoefficient),
+          status: saved.status,
+        },
+      };
     });
-    if (existing)
-      throw new ConflictException(`Vị trí ghế ${dto.row}${dto.column} đã tồn tại trong phòng này`);
-
-    // 3. Tìm SeatTypeEntity khớp với tên loại ghế
-    const seatType = await this.seatTypeRepository.findOne({
-      where: { name: dto.type, status: 'ACTIVE' },
-    });
-    if (!seatType)
-      throw new BadRequestException(`Loại ghế '${dto.type}' không tồn tại hoặc chưa được kích hoạt`);
-
-    // 4. Tạo và lưu ghế mới
-    const seat = this.seatRepository.create({
-      roomId: dto.roomId,
-      row: dto.row,
-      column: dto.column,
-      seatNumber: dto.seatNumber,
-      seatTypeId: seatType.id,
-      status: 'AVAILABLE',
-    });
-    const saved = await this.seatRepository.save(seat);
-
-    return {
-      message: 'Tạo ghế thành công',
-      data: {
-        id: saved.id,
-        label: saved.seatNumber,
-        row: saved.row,
-        column: saved.column,
-        type: seatType.name,
-        priceCoefficient: Number(seatType.priceCoefficient),
-        status: saved.status,
-      },
-    };
   }
 
   /**
@@ -127,60 +238,80 @@ export class SeatsService {
    * Dùng INSERT IGNORE để bỏ qua ghế đã tồn tại (idempotent).
    */
   async generateSeatsGrid(dto: GenerateSeatsForRoomDto) {
-    // 1. Kiểm tra phòng
-    const room = await this.roomRepository.findOneBy({ id: dto.roomId });
-    if (!room || room.status !== 'ACTIVE')
-      throw new BadRequestException(`Phòng chiếu ID ${dto.roomId} không tồn tại hoặc không khả dụng`);
+    return this.seatRepository.manager.transaction(async (manager) => {
+      await this.lockEditableRoom(manager, dto.roomId);
+      const seatRepo = manager.getRepository(Seat);
+      const roomRepo = manager.getRepository(CinemaRoom);
+      const typeRepo = manager.getRepository(SeatTypeEntity);
 
-    // 2. Lấy seat type IDs cho REGULAR và VIP
-    const [regularType, vipType] = await Promise.all([
-      this.seatTypeRepository.findOne({ where: { name: SeatType.REGULAR, status: 'ACTIVE' } }),
-      this.seatTypeRepository.findOne({ where: { name: SeatType.VIP, status: 'ACTIVE' } }),
-    ]);
-    if (!regularType)
-      throw new BadRequestException(`Loại ghế '${SeatType.REGULAR}' chưa được tạo trong hệ thống`);
-    if (!vipType)
-      throw new BadRequestException(`Loại ghế '${SeatType.VIP}' chưa được tạo trong hệ thống`);
+      // 1. Kiểm tra phòng
+      const room = await roomRepo.findOneBy({ id: dto.roomId });
+      if (!room || room.status !== 'ACTIVE')
+        throw new BadRequestException(
+          `Phòng chiếu ID ${dto.roomId} không tồn tại hoặc không khả dụng`,
+        );
 
-    const vipRowSet = new Set((dto.vipRows ?? []).map((r) => r.toUpperCase()));
+      // 2. Lấy seat type IDs cho REGULAR và VIP
+      const [regularType, vipType] = await Promise.all([
+        typeRepo.findOne({
+          where: { name: SeatType.REGULAR, status: 'ACTIVE' },
+        }),
+        typeRepo.findOne({
+          where: { name: SeatType.VIP, status: 'ACTIVE' },
+        }),
+      ]);
+      if (!regularType)
+        throw new BadRequestException(
+          `Loại ghế '${SeatType.REGULAR}' chưa được tạo trong hệ thống`,
+        );
+      if (!vipType)
+        throw new BadRequestException(
+          `Loại ghế '${SeatType.VIP}' chưa được tạo trong hệ thống`,
+        );
 
-    // 3. Tạo danh sách ghế cần INSERT
-    const placeholders: string[] = [];
-    const params: (string | number)[] = [];
+      const vipRowSet = new Set(
+        (dto.vipRows ?? []).map((r) => r.toUpperCase()),
+      );
 
-    for (const rawRow of dto.rows) {
-      const row = rawRow.toUpperCase();
-      const seatTypeId = vipRowSet.has(row) ? vipType.id : regularType.id;
+      // 3. Tạo danh sách ghế cần INSERT
+      const placeholders: string[] = [];
+      const params: (string | number)[] = [];
 
-      for (let col = 1; col <= dto.colsPerRow; col++) {
-        const label = `${row}${col}`;
-        placeholders.push('(?, ?, ?, ?, ?)');
-        params.push(dto.roomId, row, col, label, seatTypeId);
+      for (const rawRow of dto.rows) {
+        const row = rawRow.toUpperCase();
+        const seatTypeId = vipRowSet.has(row) ? vipType.id : regularType.id;
+
+        for (let col = 1; col <= dto.colsPerRow; col++) {
+          const label = `${row}${col}`;
+          placeholders.push('(?, ?, ?, ?, ?)');
+          params.push(dto.roomId, row, col, label, seatTypeId);
+        }
       }
-    }
 
-    if (!placeholders.length) {
-      return { message: 'Không có ghế nào được tạo (rows rỗng)', created: 0 };
-    }
+      if (!placeholders.length) {
+        return { message: 'Không có ghế nào được tạo (rows rỗng)', created: 0 };
+      }
 
-    // 4. Bulk INSERT — bỏ qua nếu ghế đã tồn tại (idempotent)
-    const result = await this.seatRepository.query(
-      `INSERT IGNORE INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id)
+      // 4. Bulk INSERT — bỏ qua nếu ghế đã tồn tại (idempotent)
+      const result = await seatRepo.query(
+        `INSERT IGNORE INTO seats (room_id, seat_row, seat_number, seat_label, seat_type_id)
        VALUES ${placeholders.join(', ')}`,
-      params,
-    );
+        params,
+      );
 
-    const created: number = result.affectedRows ?? 0;
-    const skipped = placeholders.length - created;
+      const created: number = result.affectedRows ?? 0;
+      const skipped = placeholders.length - created;
 
-    return {
-      message: 'Tạo ma trận ghế thành công',
-      roomId: dto.roomId,
-      roomName: room.name,
-      totalAttempted: placeholders.length,
-      created,
-      skipped,
-    };
+      await this.syncCapacity(manager, dto.roomId);
+      return {
+        message: 'Tạo ma trận ghế thành công',
+        roomId: dto.roomId,
+        roomName: room.name,
+        totalAttempted: placeholders.length,
+        created,
+        skipped,
+      };
+    });
   }
 
   /**
@@ -189,36 +320,31 @@ export class SeatsService {
    * Từ chối nếu ghế có vé PENDING hoặc VALID đang hoạt động.
    */
   async deleteSeat(id: number) {
-    // 1. Tìm ghế
-    const seat = await this.seatRepository.findOneBy({ id });
-    if (!seat) throw new NotFoundException(`Không tìm thấy ghế ID ${id}`);
-
-    if (seat.status === 'INACTIVE') {
-      return { message: `Ghế ${seat.seatNumber} đã ở trạng thái INACTIVE`, seatId: id };
-    }
-
-    // 2. Kiểm tra có vé đang hoạt động không (PENDING hoặc VALID)
-    const activeTicket = await this.ticketRepository.findOne({
-      where: [
-        { seatId: id, status: 'PENDING' },
-        { seatId: id, status: 'VALID' },
-      ],
+    const initial = await this.seatRepository.findOneBy({ id });
+    if (!initial) throw new NotFoundException('Không tìm thấy ghế');
+    return this.seatRepository.manager.transaction(async (manager) => {
+      await this.lockEditableRoom(manager, initial.roomId);
+      const seat = await manager.findOneByOrFail(Seat, { id });
+      if (
+        await manager.count(Ticket, {
+          where: [
+            { seatId: id, status: 'PENDING' },
+            { seatId: id, status: 'VALID' },
+          ],
+        })
+      ) {
+        throw new ConflictException(
+          'Ghế đang có vé hoạt động, không thể vô hiệu hóa',
+        );
+      }
+      await manager.update(Seat, id, { status: 'INACTIVE' });
+      await this.syncCapacity(manager, seat.roomId);
+      return {
+        message: 'Đã vô hiệu hóa ghế',
+        seatId: id,
+        newStatus: 'INACTIVE',
+      };
     });
-    if (activeTicket) {
-      throw new ConflictException(
-        `Ghế ${seat.seatNumber} đang có vé ${activeTicket.status} (mã: ${activeTicket.ticketCode}). Không thể vô hiệu hóa.`,
-      );
-    }
-
-    // 3. Soft-delete: chuyển sang INACTIVE
-    seat.status = 'INACTIVE';
-    await this.seatRepository.save(seat);
-
-    return {
-      message: `Ghế ${seat.seatNumber} đã được vô hiệu hóa thành công`,
-      seatId: id,
-      newStatus: 'INACTIVE',
-    };
   }
 
   // =========================================================================
@@ -293,13 +419,13 @@ export class SeatsService {
               ? 0
               : allocated?.hold_expires_at
                 ? Math.max(
-                  0,
-                  Math.floor(
-                    (new Date(allocated.hold_expires_at).getTime() -
-                      Date.now()) /
-                    1000,
-                  ),
-                )
+                    0,
+                    Math.floor(
+                      (new Date(allocated.hold_expires_at).getTime() -
+                        Date.now()) /
+                        1000,
+                    ),
+                  )
                 : (hold?.ttl ?? 0),
         };
       }),

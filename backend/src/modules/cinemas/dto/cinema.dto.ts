@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsInt,
   Min,
+  Max,
   IsOptional,
   IsString,
   IsEnum,
@@ -30,7 +31,11 @@ export class CreateCinemaDto {
   @IsNotEmpty({ message: 'Thành phố không được để trống' })
   city!: string;
 
-  @ApiProperty({ example: '02838229999', description: 'Số điện thoại rạp', required: false })
+  @ApiProperty({
+    example: '02838229999',
+    description: 'Số điện thoại rạp',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   phone?: string;
@@ -55,6 +60,7 @@ export class SeatConfigDto {
   @ApiProperty({ example: 40, description: 'Số lượng ghế thuộc loại này' })
   @IsInt()
   @Min(1, { message: 'Số lượng ghế phải lớn hơn 0' })
+  @Max(5000)
   totalSeats!: number;
 }
 
@@ -70,11 +76,13 @@ export class CreateRoomDto {
   @ApiProperty({ example: 60, description: 'Tổng số ghế trong phòng' })
   @IsInt()
   @Min(1, { message: 'Tổng số ghế phải lớn hơn 0' })
+  @Max(5000)
   totalSeats!: number;
 
   @ApiProperty({
     type: [SeatConfigDto],
-    description: 'Danh sách cấu hình số lượng theo từng loại ghế (Thường, VIP, Sweetbox...)',
+    description:
+      'Danh sách cấu hình số lượng theo từng loại ghế (Thường, VIP, Sweetbox...)',
     required: false,
   })
   @IsOptional()

@@ -5,8 +5,12 @@ import {
   IsNumber,
   IsDateString,
   Matches,
+  IsInt,
+  Min,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { MovieStatus } from '../../../common/enums';
 
 export class SearchMovieDto {
   @ApiPropertyOptional({ description: 'Từ khóa tìm kiếm theo tên phim' })
@@ -24,7 +28,8 @@ export class SearchMovieDto {
   @ApiPropertyOptional({ description: 'Lọc theo ID rạp chiếu' })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
+  @Min(1)
   cinemaId?: number;
 
   @ApiPropertyOptional({ description: 'Lọc theo ngày chiếu (YYYY-MM-DD)' })
@@ -37,11 +42,18 @@ export class SearchMovieDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
   minPrice?: number;
 
   @ApiPropertyOptional({ description: 'Khoảng giá vé tối đa' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
   maxPrice?: number;
+
+  @ApiPropertyOptional({ enum: MovieStatus })
+  @IsOptional()
+  @IsEnum(MovieStatus)
+  status?: MovieStatus;
 }

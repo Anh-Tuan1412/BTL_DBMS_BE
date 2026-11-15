@@ -5,6 +5,8 @@
 
 ---
 
+Hướng dẫn tích hợp cập nhật: [../INTEGRATION.md](../INTEGRATION.md).
+
 ## 👥 Bảng phân công nhiệm vụ thành viên & Cấu trúc thư mục
 
 | Thành viên | Trách nhiệm chính (Use Cases & Báo cáo DBMS) | Thư mục phụ trách trong `backend/src/` |
@@ -31,7 +33,7 @@ Mở terminal tại thư mục gốc của đồ án (`BTL_DBMS`):
 docker compose up -d
 ```
 > Lệnh này sẽ tự động tải và khởi chạy 3 container:
-> 1. **MySQL 8.0**: Chạy cổng `3306` (User: `movie_user`, Pass: `movie_password`, DB: `movie_booking_db`)
+> 1. **MySQL 8.0**: Chạy cổng host `3307` (User: `movie_user`, Pass: `movie_password`, DB: `movie_ticket_db`)
 > 2. **Redis 7**: Chạy cổng `6379` (In-memory lock & caching)
 > 3. **phpMyAdmin**: Chạy cổng `8080` (Giao diện xem và quản lý Database trực quan)
 
@@ -41,17 +43,18 @@ docker compose up -d
 Mở terminal và di chuyển vào thư mục `backend`:
 ```bash
 cd backend
-npm install
+test -f .env || cp .env.example .env  # nếu chưa có .env
+npm ci
 ```
 
 Kiểm tra file `.env` (đã được cấu hình sẵn theo Docker):
 ```env
 PORT=3000
 DB_HOST=localhost
-DB_PORT=3306
+DB_PORT=3307
 DB_USER=movie_user
 DB_PASSWORD=movie_password
-DB_NAME=movie_booking_db
+DB_NAME=movie_ticket_db
 
 REDIS_HOST=localhost
 REDIS_PORT=6379
@@ -63,7 +66,7 @@ SEAT_HOLD_TTL_SECONDS=300
 ---
 
 ### Bước 3: Nạp dữ liệu mẫu (Seed Data) & Chạy Server
-Chạy lệnh seed để tự động tạo tài khoản Admin mẫu, Phim mẫu, Rạp, Phòng và 40 ghế mẫu:
+Chạy lệnh seed để tự động tạo tài khoản Admin mẫu, Phim mẫu, Rạp, Phòng và ghế mẫu và các suất chiếu tương lai còn thiếu:
 ```bash
 npm run seed
 ```

@@ -24,7 +24,8 @@ export class TicketsController {
   @ApiOperation({ summary: 'Xem lịch sử các vé/booking đã đặt của bản thân' })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách lịch sử đặt vé của người dùng kèm thông tin rạp, suất chiếu',
+    description:
+      'Danh sách lịch sử đặt vé của người dùng kèm thông tin rạp, suất chiếu',
   })
   getMyBookings(@CurrentUser() user: User) {
     return this.ticketsService.getMyBookings(user.id);
@@ -85,6 +86,8 @@ export class TicketsController {
     @Param('bookingCode') bookingCode: string,
     @CurrentUser() user: User,
   ) {
-    return this.ticketsService.cancelAndRefund(bookingCode, user.id);
+    return user.role === UserRole.ADMIN
+      ? this.ticketsService.cancelAndRefund(bookingCode, user.id, true)
+      : this.ticketsService.cancelAndRefund(bookingCode, user.id);
   }
 }

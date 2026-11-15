@@ -5,9 +5,17 @@ import {
   ConflictException,
   NotFoundException,
   Logger,
+  OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, EntityManager } from 'typeorm';
+import {
+  Repository,
+  DataSource,
+  In,
+  EntityManager,
+  LessThanOrEqual,
+} from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import {
   Booking,
@@ -31,8 +39,41 @@ import {
 } from './dto/booking.dto';
 
 @Injectable()
-export class BookingsService {
+export class BookingsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BookingsService.name);
+  private expiryTimer?: ReturnType<typeof setInterval>;
+  private sweep?: Promise<void>;
+
+  onModuleInit() {
+    this.expiryTimer = setInterval(() => {
+      if (this.sweep) return;
+      this.sweep = this.expirePendingBookings()
+        .catch((error) =>
+          this.logger.warn(`Không thể dọn booking hết hạn: ${String(error)}`),
+        )
+        .finally(() => {
+          this.sweep = undefined;
+        });
+    }, 15000);
+    this.expiryTimer.unref();
+  }
+
+  async onModuleDestroy() {
+    if (this.expiryTimer) clearInterval(this.expiryTimer);
+    await this.sweep;
+  }
+
+  async expirePendingBookings() {
+    const expired = await this.bookingRepository.find({
+      where: {
+        status: BookingStatus.PENDING,
+        holdExpiresAt: LessThanOrEqual(new Date()),
+      },
+      order: { holdExpiresAt: 'ASC' },
+      take: 100,
+    });
+    for (const booking of expired) await this.expireBooking(booking.id);
+  }
   constructor(
     private readonly redisService: RedisService,
     private readonly dataSource: DataSource,
@@ -164,7 +205,10 @@ export class BookingsService {
           if (allocation.status === 'PENDING' && allocation.bookingId)
             await this.expireLocked(manager, allocation.bookingId);
         }
-        let expiresAt = Date.now() + 300000;
+        let expiresAt = Math.min(
+          Date.now() + 300000,
+          new Date(showtime.startTime).getTime(),
+        );
         for (const seatId of seatIds) {
           const token = dto.holdTokens?.[seatId];
           const hold = await this.redisService.getHold(showtime.id, seatId);
@@ -356,13 +400,53 @@ export class BookingsService {
     });
     if (!initial) throw new NotFoundException('Không tìm thấy đơn đặt vé');
 
+    if (initial.status === BookingStatus.PENDING) {
+      await this.dataSource.transaction('READ COMMITTED', async (manager) => {
+        const booking = await this.lockBooking(
+          manager,
+          initial.id,
+          initial.showtimeId,
+        );
+        if (booking.status !== BookingStatus.PENDING)
+          throw new ConflictException(
+            'Trạng thái đơn vừa thay đổi. Vui lòng tải lại trước khi hủy.',
+          );
+        await this.expireLocked(manager, booking.id);
+        await manager.update(Booking, booking.id, {
+          status: BookingStatus.CANCELLED,
+          cancelledAt: new Date(),
+        });
+        await manager.update(
+          Ticket,
+          { bookingId: booking.id },
+          { status: 'CANCELLED' },
+        );
+      });
+      await this.releaseBookingHolds(initial.id);
+      return {
+        success: true,
+        message: 'Đã hủy đơn chưa thanh toán',
+        data: { bookingCode, status: BookingStatus.CANCELLED, refundAmount: 0 },
+      };
+    }
+
     const payment = await this.dataSource.getRepository(Payment).findOneBy({
       bookingId: initial.id,
-      status: PaymentStatus.PAID,
     });
 
     if (payment?.stripePaymentIntentId) {
       return this.stripePayments.cancelAndRefund(bookingCode, userId);
+    }
+    if (initial.status === BookingStatus.CANCELLED) {
+      return {
+        success: true,
+        message: 'Đơn đã được hủy',
+        data: {
+          bookingCode,
+          status: BookingStatus.CANCELLED,
+          refundAmount: Number(payment?.refundAmount || 0),
+        },
+      };
     }
     await this.dataSource.transaction('READ COMMITTED', async (manager) => {
       const booking = await this.lockBooking(

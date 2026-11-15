@@ -4,9 +4,9 @@ import {
   IsNotEmpty,
   MinLength,
   IsOptional,
-  IsEnum,
+  IsString,
+  MaxLength,
 } from 'class-validator';
-import { UserRole } from '../../../common/enums';
 
 export class RegisterDto {
   @ApiProperty({
@@ -19,14 +19,18 @@ export class RegisterDto {
 
   @ApiProperty({
     example: 'password123',
-    description: 'Mật khẩu tối thiểu 6 ký tự',
+    description: 'Mật khẩu từ 8 đến 72 ký tự',
   })
   @IsNotEmpty({ message: 'Mật khẩu không được để trống' })
-  @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự' })
+  @IsString()
+  @MinLength(8, { message: 'Mật khẩu phải có ít nhất 8 ký tự' })
+  @MaxLength(72)
   password: string;
 
   @ApiProperty({ example: 'Nguyễn Văn A', description: 'Họ và tên' })
   @IsNotEmpty({ message: 'Họ và tên không được để trống' })
+  @IsString()
+  @MaxLength(100)
   fullName: string;
 
   @ApiProperty({
@@ -35,15 +39,7 @@ export class RegisterDto {
     description: 'Số điện thoại liên hệ',
   })
   @IsOptional()
+  @IsString()
+  @MaxLength(20)
   phoneNumber?: string;
-
-  @ApiProperty({
-    enum: UserRole,
-    default: UserRole.CUSTOMER,
-    required: false,
-    description: 'Vai trò người dùng',
-  })
-  @IsOptional()
-  @IsEnum(UserRole, { message: 'Vai trò không hợp lệ' })
-  role?: UserRole;
 }

@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Put,
   Body,
   Get,
   UseGuards,
@@ -15,7 +16,12 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto, ForgotPasswordDto, VerifyEmailDto } from './dto/auth-requests.dto';
+import {
+  LoginDto,
+  ForgotPasswordDto,
+  VerifyEmailDto,
+  ResetPasswordDto,
+} from './dto/auth-requests.dto';
 import { Public, CurrentUser } from '../../common/decorators';
 import { JwtAuthGuard } from '../../common/guards';
 import { User } from '../../database/entities/user.entity';
@@ -55,10 +61,25 @@ export class AuthController {
   }
 
   @Public()
+  @HttpCode(HttpStatus.OK)
   @Post('forgot-password')
-  @ApiOperation({ summary: 'Yêu cầu khôi phục mật khẩu (Stub)' })
+  @ApiOperation({ summary: 'Yêu cầu mã khôi phục mật khẩu, TTL 10 phút' })
   forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
     return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('resend-verification')
+  resendVerification(@Body() dto: ForgotPasswordDto) {
+    return this.authService.resendVerification(dto.email);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Put('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @ApiBearerAuth('JWT-auth')

@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, IsOptional } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
@@ -11,6 +18,7 @@ export class LoginDto {
   email: string;
 
   @ApiProperty({ example: 'password123', description: 'Mật khẩu' })
+  @IsString()
   @IsNotEmpty({ message: 'Mật khẩu không được để trống' })
   password: string;
 }
@@ -36,6 +44,14 @@ export class VerifyEmailDto {
 
   @ApiProperty({ example: '123456', description: 'Mã xác thực OTP' })
   @IsString()
-  @IsOptional()
-  otp?: string;
+  @Matches(/^\d{6}$/)
+  otp: string;
+}
+
+export class ResetPasswordDto extends VerifyEmailDto {
+  @ApiProperty({ minLength: 8, maxLength: 72 })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  newPassword: string;
 }
