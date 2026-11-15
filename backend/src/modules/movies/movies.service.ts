@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Movie } from '../../database/entities/movie.entity';
@@ -86,7 +90,19 @@ export class MoviesService {
     const movieResponse = await this.findOne(id);
     const movie = movieResponse.data;
 
-    await this.movieRepository.remove(movie);
+    try {
+      await this.movieRepository.remove(movie);
+    } catch (error) {
+      if (
+        error?.code === 'ER_ROW_IS_REFERENCED_2' ||
+        error?.driverError?.code === 'ER_ROW_IS_REFERENCED_2'
+      ) {
+        throw new ConflictException(
+          'Phim đã có lịch chiếu hoặc lịch sử vé. Hãy cập nhật trạng thái thay vì xóa.',
+        );
+      }
+      throw error;
+    }
 
     return {
       message: `Đã xóa phim ID ${id} thành công`,

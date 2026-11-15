@@ -73,8 +73,8 @@ export class ShowtimesService {
     }
 
     if (filter?.date) {
-      const dayStart = new Date(`${filter.date}T00:00:00`);
-      const dayEnd = new Date(`${filter.date}T23:59:59.999`);
+      const dayStart = new Date(`${filter.date}T00:00:00+07:00`);
+      const dayEnd = new Date(`${filter.date}T23:59:59.999+07:00`);
       if (
         Number.isFinite(dayStart.getTime()) &&
         Number.isFinite(dayEnd.getTime())
@@ -293,7 +293,9 @@ export class ShowtimesService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!room || room.status !== 'ACTIVE') {
-      throw new BadRequestException('Phòng chiếu không tồn tại hoặc không khả dụng');
+      throw new BadRequestException(
+        'Phòng chiếu không tồn tại hoặc không khả dụng',
+      );
     }
   }
 
@@ -356,10 +358,14 @@ export class ShowtimesService {
       if (!showtime) throw new NotFoundException('Không tìm thấy suất chiếu');
 
       if (showtime.roomId !== previous.roomId) {
-        throw new ConflictException('Suất chiếu vừa thay đổi dữ liệu, hãy tải lại trang');
+        throw new ConflictException(
+          'Suất chiếu vừa thay đổi dữ liệu, hãy tải lại trang',
+        );
       }
       if (showtime.status !== ShowtimeStatus.SCHEDULED) {
-        throw new ConflictException('Chỉ được cập nhật suất chiếu ở trạng thái SCHEDULED');
+        throw new ConflictException(
+          'Chỉ được cập nhật suất chiếu ở trạng thái SCHEDULED',
+        );
       }
 
       // Không cho phép sửa nếu suất chiếu đã có booking để đảm bảo toàn vẹn giao dịch
@@ -454,4 +460,3 @@ export class ShowtimesService {
     });
   }
 }
-

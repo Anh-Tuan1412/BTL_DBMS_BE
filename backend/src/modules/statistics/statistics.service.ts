@@ -5,6 +5,7 @@ import {
   OverviewSummaryDto,
   TopMovieRevenueDto,
   MonthlyRevenueDto,
+  DailyRevenueDto,
   SeatOccupancyDto,
   BenchmarkResponseDto,
 } from './dto/statistics.dto';
@@ -90,16 +91,30 @@ export class StatisticsService {
     }));
   }
 
+  async getRevenueByDay(): Promise<DailyRevenueDto[]> {
+    const rows = await this.dataSource.query(`
+      SELECT DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+07:00'), '%Y-%m-%d') AS date,
+        COUNT(*) AS bookingCount, COALESCE(SUM(b.total_amount), 0) AS revenue
+      FROM bookings b WHERE b.booking_status = 'CONFIRMED'
+      GROUP BY date ORDER BY date DESC LIMIT 90
+    `);
+    return rows.map((row: any) => ({
+      date: String(row.date),
+      bookingCount: Number(row.bookingCount),
+      revenue: Number(row.revenue),
+    }));
+  }
+
   // 3. Doanh thu theo tháng (Monthly Revenue Aggregation)
   async getRevenueByMonth(): Promise<MonthlyRevenueDto[]> {
     const rows = await this.dataSource.query(`
       SELECT 
-        DATE_FORMAT(b.created_at, '%Y-%m') AS month,
+        DATE_FORMAT(CONVERT_TZ(b.created_at, '+00:00', '+07:00'), '%Y-%m') AS month,
         COUNT(b.booking_id) AS bookingCount,
         COALESCE(SUM(b.total_amount), 0) AS revenue
       FROM bookings b
       WHERE b.booking_status = 'CONFIRMED'
-      GROUP BY DATE_FORMAT(b.created_at, '%Y-%m')
+      GROUP BY month
       ORDER BY month DESC
     `);
 
@@ -146,7 +161,9 @@ export class StatisticsService {
   async explainQuery(rawSql: string) {
     const trimmed = rawSql.trim();
     if (!trimmed.toUpperCase().startsWith('SELECT')) {
-      throw new BadRequestException('Chỉ cho phép EXPLAIN các câu truy vấn SELECT an toàn');
+      throw new BadRequestException(
+        'Chỉ cho phép EXPLAIN các câu truy vấn SELECT an toàn',
+      );
     }
 
     const start = process.hrtime();
@@ -187,7 +204,9 @@ export class StatisticsService {
     const [secRedis, nanoRedis] = process.hrtime(startRedis);
     const redisTotalMs = secRedis * 1000 + nanoRedis / 1e6;
     const redisAvgMs = redisTotalMs / N;
-    const redisThroughput = Math.round(N / Math.max(0.001, redisTotalMs / 1000));
+    const redisThroughput = Math.round(
+      N / Math.max(0.001, redisTotalMs / 1000),
+    );
 
     // Đo MySQL
     const startMysql = process.hrtime();
@@ -199,7 +218,9 @@ export class StatisticsService {
     const [secMysql, nanoMysql] = process.hrtime(startMysql);
     const mysqlTotalMs = secMysql * 1000 + nanoMysql / 1e6;
     const mysqlAvgMs = mysqlTotalMs / N;
-    const mysqlThroughput = Math.round(N / Math.max(0.001, mysqlTotalMs / 1000));
+    const mysqlThroughput = Math.round(
+      N / Math.max(0.001, mysqlTotalMs / 1000),
+    );
 
     const speedup = (mysqlTotalMs / Math.max(0.001, redisTotalMs)).toFixed(1);
 

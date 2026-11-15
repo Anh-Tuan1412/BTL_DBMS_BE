@@ -43,7 +43,15 @@ export class TicketsService {
   }
 
   // 3. Hủy vé và hoàn tiền theo điều kiện quy định
-  async cancelAndRefund(bookingCode: string, userId: number) {
+  async cancelAndRefund(bookingCode: string, userId: number, isAdmin = false) {
+    if (isAdmin) {
+      const booking = await this.bookingRepository.findOne({
+        where: { bookingCode },
+      });
+      if (!booking) throw new NotFoundException('Không tìm thấy booking');
+      // Only the controller's verified ADMIN role may delegate cancellation.
+      userId = booking.userId;
+    }
     return this.bookingsService.cancelAndRefund(bookingCode, userId);
   }
 }

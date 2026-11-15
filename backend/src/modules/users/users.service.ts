@@ -23,8 +23,14 @@ export class UsersService {
     return qb.getOne();
   }
 
-  async findById(id: number): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id } });
+  async findById(id: number, includePassword = false): Promise<User> {
+    const user = includePassword
+      ? await this.userRepository
+          .createQueryBuilder('user')
+          .addSelect('user.password')
+          .where('user.id = :id', { id })
+          .getOne()
+      : await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(`Không tìm thấy người dùng với ID ${id}`);
     }

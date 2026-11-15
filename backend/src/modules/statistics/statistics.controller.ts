@@ -14,6 +14,7 @@ import {
   OverviewSummaryDto,
   TopMovieRevenueDto,
   MonthlyRevenueDto,
+  DailyRevenueDto,
   SeatOccupancyDto,
   ExplainQueryDto,
   BenchmarkResponseDto,
@@ -57,6 +58,15 @@ export class StatisticsController {
     return this.statisticsService.getRevenueByMovies(
       limit ? Number(limit) : 10,
     );
+  }
+
+  @Get('daily-revenue')
+  @ApiOperation({
+    summary: 'Doanh thu theo ngày Việt Nam, tối đa 90 ngày có giao dịch',
+  })
+  @ApiResponse({ status: 200, type: [DailyRevenueDto] })
+  getDailyRevenue() {
+    return this.statisticsService.getRevenueByDay();
   }
 
   @Get('monthly-revenue')

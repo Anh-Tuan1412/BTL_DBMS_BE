@@ -1,5 +1,6 @@
 -- Fresh installations only. Existing databases require a reviewed data migration.
 -- Requires MySQL 8.0.16+; all application DATETIME values are UTC.
+SET NAMES utf8mb4;
 CREATE DATABASE IF NOT EXISTS movie_ticket_db
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;

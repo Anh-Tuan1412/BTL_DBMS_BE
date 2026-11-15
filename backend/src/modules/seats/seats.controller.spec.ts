@@ -15,6 +15,7 @@ import {
   SeatTypeEntity,
 } from '../../database/entities';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
+import { sessionCredential } from '../auth/session-credential';
 import { RedisService } from '../redis/redis.service';
 import { UsersService } from '../users/users.service';
 import { SeatsController } from './seats.controller';
@@ -51,7 +52,13 @@ describe('UC6 seat map with optional JWT', () => {
         },
         {
           provide: UsersService,
-          useValue: { findById: async (id: number) => ({ id }) },
+          useValue: {
+            findById: async (id: number) => ({
+              id,
+              status: 'ACTIVE',
+              password: 'test-credential-hash',
+            }),
+          },
         },
         {
           provide: RedisService,
@@ -117,7 +124,10 @@ describe('UC6 seat map with optional JWT', () => {
   });
 
   it('identifies the owner for Redis holds and pending MySQL bookings', async () => {
-    const token = jwt.sign({ sub: 7 });
+    const token = jwt.sign({
+      credential: sessionCredential('test-credential-hash', secret),
+      sub: 7,
+    });
     const response = await request(app.getHttpServer())
       .get('/seats/matrix/showtime/1')
       .set('Authorization', `Bearer ${token}`)
@@ -134,7 +144,10 @@ describe('UC6 seat map with optional JWT', () => {
   it('does not attribute another user’s holds to the signed-in user', async () => {
     const response = await request(app.getHttpServer())
       .get('/seats/matrix/showtime/1')
-      .set('Authorization', `Bearer ${jwt.sign({ sub: 8 })}`)
+      .set(
+        'Authorization',
+        `Bearer ${jwt.sign({ credential: sessionCredential('test-credential-hash', secret), sub: 8 })}`,
+      )
       .expect(200);
     expect(
       (response.body.data.seats as { isHeldByMe: boolean }[]).every(
@@ -153,7 +166,10 @@ describe('UC6 seat map with optional JWT', () => {
   it('rejects expired tokens', async () => {
     await request(app.getHttpServer())
       .get('/seats/matrix/showtime/1')
-      .set('Authorization', `Bearer ${jwt.sign({ sub: 7 }, { expiresIn: -1 })}`)
+      .set(
+        'Authorization',
+        `Bearer ${jwt.sign({ credential: sessionCredential('test-credential-hash', secret), sub: 7 }, { expiresIn: -1 })}`,
+      )
       .expect(401);
   });
 
