@@ -666,3 +666,194 @@ INSERT INTO showtime_seats (showtime_id, seat_id, room_id, booking_id, seat_stat
 ON DUPLICATE KEY UPDATE seat_status = VALUES(seat_status);
 
 INSERT INTO schema_metadata (version) VALUES (2) ON DUPLICATE KEY UPDATE version = 2;
+
+-- =========================================================
+-- BEGIN CODEX ADDED DATA - Dữ liệu demo bổ sung (mục 16)
+-- Khối này dành cho lần khởi tạo database mới, sau mục 15.
+-- Mốc lịch tính theo ngày Việt Nam tại lúc import; DATETIME lưu UTC.
+-- =========================================================
+START TRANSACTION;
+
+-- 16.1 [CODEX] Phim có thật và thể loại bổ sung.
+INSERT INTO genres (genre_id, genre_name) VALUES
+(1001, 'Kinh dị'), (1002, 'Bí ẩn'), (1003, 'Tình cảm'),
+(1004, 'Tài liệu'), (1005, 'Âm nhạc');
+
+SET @demo_today = DATE(UTC_TIMESTAMP() + INTERVAL 7 HOUR);
+SET @demo_month = CAST(DATE_FORMAT(@demo_today, '%Y-%m-01') AS DATE);
+
+.
+
+INSERT INTO movies (
+    movie_id, title, description, duration, director, cast_members,
+    trailer_url, rating, release_date, age_rating, poster_url, status
+) VALUES
+(1001, 'A Quiet Place', 'Một gia đình phải giữ im lặng để sống sót trước những sinh vật săn mồi bằng âm thanh.', 90,
+ 'John Krasinski', 'Emily Blunt, John Krasinski, Millicent Simmonds, Noah Jupe',
+ 'https://www.youtube.com/watch?v=WR7cc5t7tv8', 7.5, '2018-04-06', 'T16',
+ 'https://upload.wikimedia.org/wikipedia/en/a/a0/A_Quiet_Place_film_poster.png', 'NOW_SHOWING'),
+(1002, 'La La Land', 'Một nữ diễn viên đầy hoài bão và một nghệ sĩ jazz yêu nhau khi theo đuổi sự nghiệp ở Los Angeles.', 128,
+ 'Damien Chazelle', 'Ryan Gosling, Emma Stone, John Legend',
+ 'https://www.youtube.com/watch?v=_oBwwSXdO_E', 8.0, '2016-12-09', 'T13',
+ 'https://upload.wikimedia.org/wikipedia/en/a/ab/La_La_Land_%28film%29.png', 'NOW_SHOWING'),
+(1003, 'Free Solo', 'Phim tài liệu theo chân Alex Honnold khi anh chuẩn bị leo vách El Capitan mà không dùng dây bảo hiểm.', 100,
+ 'Elizabeth Chai Vasarhelyi, Jimmy Chin', 'Alex Honnold, Sanni McCandless, Tommy Caldwell',
+ 'https://www.youtube.com/watch?v=urRVZ4SW7WU', 8.2, '2018-09-28', 'T13',
+ 'https://lumiere-a.akamaihd.net/v1/images/docfilmswebsite_1080x1600_freesolo_91d7bed0.jpeg?region=0%2C0%2C1080%2C1600', 'NOW_SHOWING'),
+(1004, 'Sing', 'Chú gấu koala Buster Moon tổ chức cuộc thi ca hát để cứu nhà hát đang gặp khó khăn.', 108,
+ 'Garth Jennings', 'Matthew McConaughey, Reese Witherspoon, Scarlett Johansson, Taron Egerton',
+ 'https://www.youtube.com/watch?v=vo0xce7eMw0', 7.1, '2016-12-21', 'P',
+ 'https://images.contentstack.io/v3/assets/blt13adb7e2033fcee5/blt475d20664cb3f25e/691c82e0f1c20313ed0b6864/Sing_Poster_2000x3000_uaa.jpg?width=1200', 'NOW_SHOWING'),
+(1005, 'The Martian', 'Bị bỏ lại trên Sao Hỏa, phi hành gia Mark Watney tìm cách sống sót và liên lạc với đội cứu hộ.', 141,
+ 'Ridley Scott', 'Matt Damon, Jessica Chastain, Chiwetel Ejiofor',
+ 'https://www.youtube.com/watch?v=ej3ioOneTy8', 8.0, '2015-10-02', 'T13',
+ 'https://lumiere-a.akamaihd.net/v1/images/image_a119dd78.jpeg?region=0%2C0%2C800%2C1200', 'NOW_SHOWING'),
+(1006, 'Finding Nemo', 'Cá hề Marlin cùng Dory băng qua đại dương để tìm Nemo sau khi cậu bị bắt khỏi rạn san hô.', 100,
+ 'Andrew Stanton', 'Albert Brooks, Ellen DeGeneres, Alexander Gould',
+ 'https://www.youtube.com/watch?v=UnrNR-mcgLY', 8.2, '2003-05-30', 'P',
+ 'https://lumiere-a.akamaihd.net/v1/images/p_findingnemo_19752_05271d3f.jpeg?region=0%2C0%2C540%2C810', 'NOW_SHOWING'),
+(1007, 'Soul', 'Một giáo viên âm nhạc lạc vào thế giới của các linh hồn ngay khi cơ hội biểu diễn nhạc jazz mở ra.', 100,
+ 'Pete Docter (đồng đạo diễn Kemp Powers)', 'Jamie Foxx, Tina Fey, Graham Norton',
+ 'https://www.youtube.com/watch?v=qNYcwbEL-pg', 8.0, '2020-12-25', 'P',
+ 'https://lumiere-a.akamaihd.net/v1/images/p_soul_disneyplus_v2_20907_764da65d.jpeg?region=0%2C0%2C540%2C810', 'COMING_SOON'),
+(1008, 'Shutter Island', 'Hai cảnh sát liên bang đến bệnh viện tâm thần trên đảo để điều tra vụ mất tích của một bệnh nhân.', 138,
+ 'Martin Scorsese', 'Leonardo DiCaprio, Mark Ruffalo, Ben Kingsley',
+ 'https://www.youtube.com/watch?v=5iaYLCiq5RM', 8.2, '2010-02-19', 'T16',
+ 'https://upload.wikimedia.org/wikipedia/en/7/76/Shutterislandposter.jpg', 'END_OF_SHOW');
+
+INSERT INTO movie_genres (movie_id, genre_id) VALUES
+(1001, 1001), (1001, 1), (1001, 13),
+(1002, 1003), (1002, 1005), (1002, 5),
+(1003, 1004), (1003, 2),
+(1004, 1005), (1004, 7), (1004, 11), (1004, 12),
+(1005, 1), (1005, 2), (1005, 5),
+(1006, 2), (1006, 11), (1006, 12),
+(1007, 1005), (1007, 10), (1007, 11),
+(1008, 1002), (1008, 13);
+
+-- 16.2 48 suất đã chiếu trong sáu tháng trước và 56 suất mở bán
+-- trong bảy ngày tới. Các phòng luân phiên chiếu phim ở khung giờ 09:00–21:00.
+INSERT INTO showtimes (showtime_id, movie_id, room_id, start_time, end_time, base_price, status)
+WITH RECURSIVE slots AS (
+    SELECT 0 AS n UNION ALL SELECT n + 1 FROM slots WHERE n < 55
+),
+schedule AS (
+    SELECT 10000 + n AS showtime_id,
+           CASE MOD(n, 9)
+               WHEN 0 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 3 WHEN 3 THEN 4
+               WHEN 4 THEN 1001 WHEN 5 THEN 1002 WHEN 6 THEN 1003
+               WHEN 7 THEN 1004 ELSE 1008
+           END AS movie_id,
+           1 + MOD(n, 8) AS room_id,
+           TIMESTAMP(
+               @demo_month - INTERVAL (1 + FLOOR(n / 8)) MONTH + INTERVAL (4 + 2 * MOD(n, 8)) DAY,
+               MAKETIME(9 + MOD(n * 3, 13), 0, 0)
+           ) - INTERVAL 7 HOUR AS start_time,
+           65000 + 5000 * MOD(n * 3, 15) AS base_price,
+           'COMPLETED' AS status
+    FROM slots WHERE n < 48
+    UNION ALL
+    SELECT 10100 + n,
+           CASE MOD(n + FLOOR(n / 8), 10)
+               WHEN 0 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 3 WHEN 3 THEN 4
+               WHEN 4 THEN 1001 WHEN 5 THEN 1002 WHEN 6 THEN 1003
+               WHEN 7 THEN 1004 WHEN 8 THEN 1005 ELSE 1006
+           END,
+           1 + MOD(n, 8),
+           TIMESTAMP(
+               @demo_today + INTERVAL (1 + FLOOR(n / 8)) DAY,
+               MAKETIME(9 + MOD(n * 5, 13), 0, 0)
+           ) - INTERVAL 7 HOUR,
+           75000 + 5000 * MOD(n * 7, 16),
+           'SCHEDULED'
+    FROM slots
+)
+SELECT s.showtime_id, s.movie_id, s.room_id, s.start_time,
+       s.start_time + INTERVAL m.duration MINUTE, s.base_price, s.status
+FROM schedule s JOIN movies m ON m.movie_id = s.movie_id;
+
+-- 16.3 Sơ đồ ghế thật theo phòng của từng suất mới.
+INSERT INTO showtime_seats (showtime_id, seat_id, room_id)
+SELECT s.showtime_id, seat.seat_id, s.room_id
+FROM showtimes s JOIN seats seat ON seat.room_id = s.room_id
+WHERE (s.showtime_id BETWEEN 10000 AND 10047 OR s.showtime_id BETWEEN 10100 AND 10155)
+  AND seat.status = 'AVAILABLE';
+
+-- 16.4 Mỗi đơn có 1–4 vé. Phân ghế thành nhóm bốn vị trí
+-- để các đơn không tranh cùng ghế. Một số suất tương lai có ghế bán trước.
+CREATE TEMPORARY TABLE demo_ticket_rows AS
+WITH RECURSIVE order_slots AS (
+    SELECT 1 AS slot UNION ALL SELECT slot + 1 FROM order_slots WHERE slot < 8
+),
+seat_positions AS (
+    SELECT seat_id, room_id, seat_type_id,
+           ROW_NUMBER() OVER (PARTITION BY room_id ORDER BY seat_label, seat_id) AS position
+    FROM seats WHERE status = 'AVAILABLE'
+),
+planned_orders AS (
+    SELECT s.showtime_id, s.room_id, s.base_price, s.status AS show_status, o.slot,
+           CONCAT('DEMO-BK-', s.showtime_id, '-', o.slot) COLLATE utf8mb4_unicode_ci AS booking_code,
+           5 + MOD(s.showtime_id + o.slot, 6) AS user_id,
+           CASE
+               WHEN s.status = 'COMPLETED' THEN s.start_time - INTERVAL (3 + o.slot) HOUR
+               ELSE UTC_TIMESTAMP() - INTERVAL (1 + o.slot) HOUR
+           END AS ordered_at,
+           CASE WHEN o.slot = 8 THEN 2 ELSE 1 + MOD(s.showtime_id + o.slot, 4) END AS ticket_count,
+           CASE WHEN o.slot = 8 THEN 'CANCELLED' ELSE 'CONFIRMED' END AS booking_status
+    FROM showtimes s CROSS JOIN order_slots o
+    WHERE (
+        s.showtime_id BETWEEN 10000 AND 10047
+        AND (o.slot <= 3 + MOD(s.showtime_id, 5) OR (o.slot = 8 AND MOD(s.showtime_id, 4) = 0))
+    ) OR (
+        s.showtime_id BETWEEN 10100 AND 10155 AND o.slot <= MOD(s.showtime_id, 5)
+    )
+)
+SELECT o.*, seat.seat_id, ROUND(o.base_price * st.price_coefficient, 0) AS ticket_price
+FROM planned_orders o
+JOIN seat_positions seat ON seat.room_id = o.room_id
+ AND seat.position BETWEEN 4 * (o.slot - 1) + 1 AND 4 * (o.slot - 1) + o.ticket_count
+JOIN seat_types st ON st.seat_type_id = seat.seat_type_id;
+
+-- 16.5 Đơn, vé và trạng thái ghế khớp với nhau.
+INSERT INTO bookings (booking_code, user_id, showtime_id, total_amount, booking_status,
+                      cancelled_at, cancellation_reason, created_at)
+SELECT booking_code, user_id, showtime_id, SUM(ticket_price), booking_status,
+       IF(booking_status = 'CANCELLED', ordered_at + INTERVAL 30 MINUTE, NULL),
+       IF(booking_status = 'CANCELLED', 'Khách đổi lịch (demo)', NULL),
+       ordered_at
+FROM demo_ticket_rows
+GROUP BY booking_code, user_id, showtime_id, booking_status, ordered_at;
+
+INSERT INTO booking_details (ticket_code, hold_token, showtime_id, ticket_status,
+                             booking_id, seat_id, ticket_price, created_at)
+SELECT CONCAT('DEMO-TK-', d.showtime_id, '-', d.seat_id),
+       CONCAT('demo:', d.showtime_id, ':', d.seat_id), d.showtime_id,
+       CASE WHEN d.booking_status = 'CANCELLED' THEN 'REFUNDED'
+            WHEN d.show_status = 'COMPLETED' THEN 'USED'
+            ELSE 'VALID' END,
+       b.booking_id, d.seat_id, d.ticket_price, d.ordered_at
+FROM demo_ticket_rows d JOIN bookings b ON b.booking_code = d.booking_code COLLATE utf8mb4_unicode_ci;
+
+UPDATE showtime_seats ss
+JOIN demo_ticket_rows d ON d.showtime_id = ss.showtime_id AND d.seat_id = ss.seat_id
+JOIN bookings b ON b.booking_code = d.booking_code COLLATE utf8mb4_unicode_ci
+SET ss.booking_id = b.booking_id, ss.seat_status = 'BOOKED'
+WHERE d.booking_status = 'CONFIRMED';
+
+-- 16.6 Thanh toán và hoàn tiền giả lập cho báo cáo.
+-- Không có Stripe ID thật. Các đơn hoàn tiền không tính vào doanh thu thực nhận.
+INSERT INTO payments (booking_id, payment_method, transaction_code, amount, payment_status,
+                      refund_id, refund_amount, paid_at, refunded_at, created_at)
+SELECT b.booking_id,
+       ELT(1 + MOD(b.showtime_id + MIN(d.slot), 4), 'MOMO', 'VNPAY', 'ZALOPAY', 'CASH'),
+       CONCAT('DEMO-PAY-', b.booking_code), b.total_amount,
+       IF(b.booking_status = 'CANCELLED', 'REFUNDED', 'SUCCESS'),
+       IF(b.booking_status = 'CANCELLED', CONCAT('DEMO-REFUND-', b.booking_code), NULL),
+       IF(b.booking_status = 'CANCELLED', b.total_amount, 0),
+       b.created_at + INTERVAL 2 MINUTE, b.cancelled_at, b.created_at
+FROM bookings b JOIN demo_ticket_rows d ON b.booking_code = d.booking_code COLLATE utf8mb4_unicode_ci
+GROUP BY b.booking_id, b.showtime_id, b.booking_code, b.total_amount,
+         b.booking_status, b.created_at, b.cancelled_at;
+
+DROP TEMPORARY TABLE demo_ticket_rows;
+COMMIT;
