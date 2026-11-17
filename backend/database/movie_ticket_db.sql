@@ -667,14 +667,8 @@ ON DUPLICATE KEY UPDATE seat_status = VALUES(seat_status);
 
 INSERT INTO schema_metadata (version) VALUES (2) ON DUPLICATE KEY UPDATE version = 2;
 
--- =========================================================
--- BEGIN CODEX ADDED DATA - Dữ liệu demo bổ sung (mục 16)
--- Khối này dành cho lần khởi tạo database mới, sau mục 15.
--- Mốc lịch tính theo ngày Việt Nam tại lúc import; DATETIME lưu UTC.
--- =========================================================
 START TRANSACTION;
 
--- 16.1 [CODEX] Phim có thật và thể loại bổ sung.
 INSERT INTO genres (genre_id, genre_name) VALUES
 (1001, 'Kinh dị'), (1002, 'Bí ẩn'), (1003, 'Tình cảm'),
 (1004, 'Tài liệu'), (1005, 'Âm nhạc');
@@ -682,7 +676,6 @@ INSERT INTO genres (genre_id, genre_name) VALUES
 SET @demo_today = DATE(UTC_TIMESTAMP() + INTERVAL 7 HOUR);
 SET @demo_month = CAST(DATE_FORMAT(@demo_today, '%Y-%m-01') AS DATE);
 
-.
 
 INSERT INTO movies (
     movie_id, title, description, duration, director, cast_members,
