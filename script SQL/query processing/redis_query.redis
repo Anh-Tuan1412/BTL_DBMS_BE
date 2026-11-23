@@ -1,0 +1,48 @@
+# ------------------------------------------------------------------------------
+# POINT LOOKUP: Khách hàng tra cứu nhanh thông tin cuống vé theo booking_code
+# ------------------------------------------------------------------------------
+
+# Khởi tạo snapshot cuống vé với mã vé thật 
+SET booking:ticket:DEMO-BK-10147-1 "{\"bookingCode\":\"DEMO-BK-10147-1\",\"userId\":7,\"totalAmount\":120000,\"movie\":\"Dune: Part Two\",\"status\":\"CONFIRMED\"}" EX 86400
+
+# Thực thi đọc bản ghi tức thời:
+GET booking:ticket:DEMO-BK-10147-1
+
+# Đọc theo dạng trường-giá trị:
+HSET booking:hash:DEMO-BK-10147-1 booking_code "DEMO-BK-10147-1" user_id "7" total_amount "120000" status "CONFIRMED"
+HGETALL booking:hash:DEMO-BK-10147-1
+
+
+# ------------------------------------------------------------------------------
+# RANGE QUERY: Lọc các suất chiếu theo dải thời gian epoch timestamp (UC-04)
+# ------------------------------------------------------------------------------
+
+# Nạp các suất chiếu mẫu:
+ZADD showtimes:room:1 1772323200 "showtime:10040:A_Quiet_Place"
+ZADD showtimes:room:1 1772409600 "showtime:10041:Dune_Part_Two"
+ZADD showtimes:room:1 1772496000 "showtime:10042:Oppenheimer"
+ZADD showtimes:room:1 1772582400 "showtime:10043:Deadpool_Wolverine"
+ZADD showtimes:room:1 1773500000 "showtime:10044:Godzilla_OutRange"
+
+# Thực thi quét dải thời gian:
+ZRANGEBYSCORE showtimes:room:1 1772323200 1772600000 WITHSCORES
+
+
+# ------------------------------------------------------------------------------
+# TOP-K RANKING & AGGREGATION: Xếp hạng Top phim ăn khách nhất theo thời gian thực
+# ------------------------------------------------------------------------------
+
+# Cập nhật điểm doanh thu thật:
+ZINCRBY leaderboard:top_movies 11452000 "Dune: Part Two"
+ZINCRBY leaderboard:top_movies 11207000 "Deadpool & Wolverine"
+ZINCRBY leaderboard:top_movies 11033000 "A Quiet Place"
+ZINCRBY leaderboard:top_movies 10286000 "Oppenheimer"
+ZINCRBY leaderboard:top_movies 8934000  "Sing"
+
+# Top 3 phim doanh thu cao nhất:
+ZREVRANGE leaderboard:top_movies 0 2 WITHSCORES
+
+# Tra cứu thứ hạng và doanh thu của một bộ phim cụ thể:
+ZREVRANK leaderboard:top_movies "Dune: Part Two"
+ZSCORE leaderboard:top_movies "Dune: Part Two"
+

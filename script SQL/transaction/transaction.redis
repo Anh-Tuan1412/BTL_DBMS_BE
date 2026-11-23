@@ -1,0 +1,67 @@
+# ─── Chuẩn bị ban đầu ───
+DEL txdemo:seat:1 txdemo:seat:2 txdemo:bookings
+
+ECHO "=== T1: MULTI/EXEC — Dat ghe thanh cong ==="
+
+# Chuẩn bị dữ liệu
+DEL txdemo:seat:1 txdemo:seat:2 txdemo:bookings
+SET txdemo:seat:1 AVAILABLE
+SET txdemo:seat:2 AVAILABLE
+
+# Bắt đầu xếp lệnh
+MULTI
+SET txdemo:seat:1 BOOKED
+HSET txdemo:bookings booking:1 "seat:1|customer:Nguyen Van A"
+EXEC
+
+# Kiểm chứng T1
+ECHO "--- Kiem chung T1 ---"
+GET txdemo:seat:1
+GET txdemo:seat:2
+HGETALL txdemo:bookings
+
+ECHO "=== T2: DISCARD — Huy nhom lenh truoc khi thuc thi ==="
+
+# Chuẩn bị lại dữ liệu
+DEL txdemo:seat:1 txdemo:seat:2 txdemo:bookings
+SET txdemo:seat:1 AVAILABLE
+SET txdemo:seat:2 AVAILABLE
+
+# Xếp lệnh rồi hủy
+MULTI
+SET txdemo:seat:1 BOOKED
+HSET txdemo:bookings booking:1 "seat:1|customer:Tran Van B"
+DISCARD
+
+# Kiểm chứng T2
+ECHO "--- Kiem chung T2 ---"
+GET txdemo:seat:1
+GET txdemo:seat:2
+HGETALL txdemo:bookings
+
+
+
+ECHO "=== T3: LOI LUC THUC THI ==="
+
+# Chuẩn bị: tạo bookings dạng string
+DEL txdemo:seat:1 txdemo:seat:2 txdemo:bookings
+SET txdemo:seat:1 AVAILABLE
+SET txdemo:seat:2 AVAILABLE
+SET txdemo:bookings "day-la-string-khong-phai-hash"
+
+# Xếp lệnh — HSET sẽ lỗi vì bookings là string
+MULTI
+SET txdemo:seat:1 BOOKED
+HSET txdemo:bookings booking:1 "seat:1|customer:Le Van C"
+EXEC
+
+# Kiểm chứng T3: seat:1 đã BOOKED dù HSET lỗi
+ECHO "--- Kiem chung T3 ---"
+ECHO "seat:1 van bi doi thanh BOOKED du HSET loi:"
+GET txdemo:seat:1
+ECHO "bookings van la string cu (HSET that bai):"
+GET txdemo:bookings
+TYPE txdemo:bookings
+
+# Dọn key demo
+DEL txdemo:seat:1 txdemo:seat:2 txdemo:bookings
